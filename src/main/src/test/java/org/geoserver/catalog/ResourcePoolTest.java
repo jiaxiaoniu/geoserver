@@ -1,30 +1,15 @@
-/* (c) 2014-2020 Open Source Geospatial Foundation - all rights reserved
+/* (c) 2014-2015 Open Source Geospatial Foundation - all rights reserved
+ * (c) 2001 - 2013 OpenPlans
  * This code is licensed under the GPL 2.0 license, available at the root
  * application directory.
  */
 
 package org.geoserver.catalog;
 
-import static org.easymock.EasyMock.capture;
-import static org.easymock.EasyMock.createNiceMock;
-import static org.easymock.EasyMock.expect;
-import static org.easymock.EasyMock.replay;
+import static org.easymock.EasyMock.*;
 import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.hasEntry;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNotSame;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.hamcrest.Matchers.*;
+import static org.junit.Assert.*;
 
 import java.awt.image.RenderedImage;
 import java.io.File;
@@ -33,7 +18,6 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.net.URI;
 import java.net.URL;
@@ -48,8 +32,7 @@ import javax.xml.transform.stream.StreamResult;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.reflect.FieldUtils;
 import org.easymock.Capture;
-import org.easymock.CaptureType;
-import org.easymock.EasyMock;
+import org.easymock.classextension.EasyMock;
 import org.geoserver.catalog.util.ReaderUtils;
 import org.geoserver.config.GeoServer;
 import org.geoserver.config.GeoServerDataDirectory;
@@ -67,7 +50,6 @@ import org.geotools.coverage.grid.io.AbstractGridCoverage2DReader;
 import org.geotools.coverage.grid.io.AbstractGridFormat;
 import org.geotools.coverage.grid.io.GridCoverage2DReader;
 import org.geotools.coverage.grid.io.StructuredGridCoverage2DReader;
-import org.geotools.coverage.util.CoverageUtilities;
 import org.geotools.data.DataAccess;
 import org.geotools.data.DataStore;
 import org.geotools.data.Query;
@@ -75,17 +57,20 @@ import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureSource;
 import org.geotools.data.simple.SimpleFeatureStore;
 import org.geotools.data.wfs.WFSDataStoreFactory;
+import org.geotools.factory.GeoTools;
+import org.geotools.factory.Hints;
 import org.geotools.feature.FeatureIterator;
 import org.geotools.feature.NameImpl;
 import org.geotools.feature.collection.DecoratingFeatureCollection;
 import org.geotools.feature.collection.SortedSimpleFeatureCollection;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.gce.geotiff.GeoTiffFormat;
-import org.geotools.image.util.ImageUtilities;
 import org.geotools.jdbc.JDBCDataStore;
 import org.geotools.jdbc.VirtualTable;
 import org.geotools.jdbc.VirtualTableParameter;
 import org.geotools.ows.ServiceException;
+import org.geotools.resources.coverage.CoverageUtilities;
+import org.geotools.resources.image.ImageUtilities;
 import org.geotools.styling.AbstractStyleVisitor;
 import org.geotools.styling.Mark;
 import org.geotools.styling.PolygonSymbolizer;
@@ -93,8 +78,6 @@ import org.geotools.styling.Style;
 import org.geotools.util.SoftValueHashMap;
 import org.geotools.util.URLs;
 import org.geotools.util.Version;
-import org.geotools.util.factory.GeoTools;
-import org.geotools.util.factory.Hints;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.locationtech.jts.geom.Point;
@@ -403,7 +386,7 @@ public class ResourcePoolTest extends GeoServerSystemTestSupport {
         assertFalse("foo".equals(lakes.getTitle()));
 
         GeoServerDataDirectory dd = new GeoServerDataDirectory(getResourceLoader());
-        File info = dd.config(lakes).file();
+        File info = dd.findResourceFile(lakes);
         // File info = getResourceLoader().find("featureTypes", "cite_Lakes", "info.xml");
 
         FileReader in = new FileReader(info);
@@ -567,30 +550,6 @@ public class ResourcePoolTest extends GeoServerSystemTestSupport {
     }
 
     @Test
-    public void testAddFilePathWithSpaces() throws Exception {
-        // Other tests mess with or reset the resourcePool, so lets make it is initialised properly
-        GeoServerExtensions.extensions(ResourcePoolInitializer.class)
-                .get(0)
-                .initialize(getGeoServer());
-
-        ResourcePool rp = getCatalog().getResourcePool();
-
-        CoverageStoreInfo info = getCatalog().getFactory().createCoverageStore();
-        info.setName("spaces");
-        info.setType("ImagePyramid");
-        info.setEnabled(true);
-        info.setURL(
-                "file://./src/test/resources/data_dir/nested_layer_groups/data/pyramid with space");
-        try {
-            rp.getGridCoverageReader(info, null);
-        } catch (Exception e) {
-            e.printStackTrace();
-            fail("Unable to add an imagepyramid with a space in it's name");
-        }
-        rp.dispose();
-    }
-
-    @Test
     public void testWmsCascadeEntityExpansion() throws Exception {
         // Other tests mess with or reset the resourcePool, so lets make it is initialized properly
         GeoServerExtensions.extensions(ResourcePoolInitializer.class)
@@ -702,7 +661,7 @@ public class ResourcePoolTest extends GeoServerSystemTestSupport {
         ds.setWorkspace(ws);
         ds.setEnabled(true);
 
-        Map<String, Serializable> params = ds.getConnectionParameters();
+        Map params = ds.getConnectionParameters();
         params.put("dbtype", "h2");
         File dbFile =
                 new File(getTestData().getDataDirectoryRoot().getAbsolutePath(), "data/h2test");
@@ -792,7 +751,7 @@ public class ResourcePoolTest extends GeoServerSystemTestSupport {
                 createNiceMock("theReader", AbstractGridCoverage2DReader.class);
         replay(reader);
         AbstractGridFormat format = createNiceMock("theFormat", AbstractGridFormat.class);
-        Capture<Hints> capturedHints = Capture.newInstance(CaptureType.LAST);
+        Capture<Hints> capturedHints = new Capture<>();
         expect(format.getReader(EasyMock.eq(url), capture(capturedHints)))
                 .andReturn(reader)
                 .anyTimes();
@@ -868,28 +827,5 @@ public class ResourcePoolTest extends GeoServerSystemTestSupport {
         assertNotNull(featureDefaultGeometry);
         assertEquals("pointProperty", schemaDefaultGeometry.getLocalName());
         assertEquals(schemaDefaultGeometry, featureDefaultGeometry);
-    }
-
-    /**
-     * Tests the ability for the ResourcePool to convert input objects for getting a specific
-     * GridCoverageReader using the CoverageReaderInputObjectConverter extension point.
-     *
-     * @throws IOException
-     */
-    @Test
-    public void testCoverageReaderInputConverter() throws IOException {
-        Catalog catalog = getCatalog();
-        ResourcePool pool = new ResourcePool(catalog);
-
-        CoverageStoreInfo info = catalog.getFactory().createCoverageStore();
-        info.setType("ImagePyramid");
-        info.setURL(
-                "file://./src/test/resources/data_dir/nested_layer_groups/data/pyramid%20with%20space");
-
-        GridCoverageReader reader = pool.getGridCoverageReader(info, null);
-
-        // the CoverageReaderFileConverter should have successfully converted the URL string to a
-        // File object
-        assertTrue(reader.getSource() instanceof File);
     }
 }

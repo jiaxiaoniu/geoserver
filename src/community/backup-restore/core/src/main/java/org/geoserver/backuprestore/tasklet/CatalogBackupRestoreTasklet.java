@@ -127,7 +127,16 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
         return RepeatStatus.FINISHED;
     }
 
-    /** Perform Backup */
+    /**
+     * Perform Backup
+     *
+     * @param jobExecution
+     * @param geoserver
+     * @param dd
+     * @param resourceStore
+     * @throws Exception
+     * @throws IOException
+     */
     private void doBackup(
             JobExecution jobExecution,
             final GeoServer geoserver,
@@ -265,7 +274,14 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
         }
     }
 
-    /** */
+    /**
+     * @param jobExecution
+     * @param geoserver
+     * @param dd
+     * @throws Exception
+     * @throws IOException
+     * @throws UnexpectedJobExecutionException
+     */
     @SuppressWarnings("unused")
     private void doRestore(
             JobExecution jobExecution, final GeoServer geoserver, final GeoServerDataDirectory dd)
@@ -375,7 +391,17 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
         }
     }
 
-    /** */
+    /**
+     * @param geoserver
+     * @param dd
+     * @param sourceRestoreFolder
+     * @param sourceWorkspacesFolder
+     * @param newGeoServerInfo
+     * @param newLoggingInfo
+     * @throws IOException
+     * @throws Exception
+     * @throws IllegalArgumentException
+     */
     private void hardRestore(
             final GeoServer geoserver,
             final GeoServerDataDirectory dd,
@@ -384,8 +410,6 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
             GeoServerInfo newGeoServerInfo,
             LoggingInfo newLoggingInfo)
             throws IOException, Exception, IllegalArgumentException {
-
-        final boolean purgeResources = purge || !filterIsValid();
 
         if (!skipSettings && !filterIsValid()) {
             // Restore GeoServer Global Info
@@ -404,7 +428,7 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
         // Restore Workspaces
         // - Prepare folder
         Resource workspaces = dd.get("workspaces");
-        if (purgeResources) {
+        if (purge) {
             if (!filterIsValid()) {
                 Files.delete(workspaces.dir());
             }
@@ -421,7 +445,7 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
         // - Prepare folder
         Resource styles = dd.get("styles");
 
-        if (purgeResources) {
+        if (purge) {
             if (!filterIsValid()) {
                 Files.delete(styles.dir());
                 styles = BackupUtils.dir(dd.get(Paths.BASE), "styles");
@@ -432,7 +456,8 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
         // Restore LayerGroups
         // - Prepare folder
         Resource layerGroups = dd.get("layergroups");
-        if (purgeResources) {
+        // - TODO: if purge
+        if (purge) {
             if (!filterIsValid()) {
                 Files.delete(layerGroups.dir());
                 layerGroups = BackupUtils.dir(dd.get(Paths.BASE), "layergroups");
@@ -441,7 +466,7 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
         }
 
         // Restore Workspace Specific Settings and Services
-        if (purgeResources) {
+        if (purge && !filterIsValid()) {
             restoreLocalWorkspaceSettingsAndServices(
                     geoserver, sourceRestoreFolder, sourceWorkspacesFolder, dd);
 
@@ -476,7 +501,7 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
         }
 
         // Restore GWC Configuration bits
-        if (purgeResources || !skipGWC) {
+        if (!skipGWC) {
             try {
                 if (GeoServerExtensions.bean("gwcGeoServervConfigPersister") != null) {
                     restoreGWCSettings(sourceRestoreFolder, dd.get(Paths.BASE));
@@ -493,7 +518,15 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
         }
     }
 
-    /** */
+    /**
+     * @param geoserver
+     * @param td
+     * @param sourceRestoreFolder
+     * @param sourceWorkspacesFolder
+     * @param newGeoServerInfo
+     * @param newLoggingInfo
+     * @throws Exception
+     */
     private void softRestore(
             final GeoServer geoserver,
             GeoServerDataDirectory td,
@@ -557,7 +590,11 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
         Files.delete(td.get(Paths.BASE).dir());
     }
 
-    /** */
+    /**
+     * @param resourceLoader
+     * @param configFile
+     * @throws IOException
+     */
     private void replaceConfigFile(
             final GeoServerResourceLoader resourceLoader, Resource configFile) throws IOException {
         // - Check of the resource exists on the restore folder
@@ -576,7 +613,13 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
         }
     }
 
-    /** */
+    /**
+     * @param geoserver
+     * @param sourceRestoreFolder
+     * @param sourceWorkspacesFolder
+     * @param dd
+     * @throws Exception
+     */
     private void restoreLocalWorkspaceSettingsAndServices(
             final GeoServer geoserver,
             Resource sourceRestoreFolder,
@@ -670,11 +713,7 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
                     if (localService != null) {
                         localService.setWorkspace(ws);
                         if (!isDryRun()) {
-                            if (geoserver.getServiceByName(
-                                            ws, serviceResource.name(), ServiceInfo.class)
-                                    == null) {
-                                geoserver.add(localService);
-                            }
+                            geoserver.add(localService);
                         }
                         doWrite(localService, dd.get(Paths.path("workspaces", ws.getName())), "");
                     }
@@ -714,7 +753,10 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
         }
     }
 
-    /** */
+    /**
+     * @param layerGroups
+     * @throws Exception
+     */
     private void restoreGlobalLayerGroups(Resource layerGroups) throws Exception {
         for (LayerGroupInfo lyg : getCatalog().getLayerGroups()) {
             // Only Global LayerGroups here; local ones will be restored later on
@@ -724,7 +766,11 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
         }
     }
 
-    /** */
+    /**
+     * @param sourceRestoreFolder
+     * @param styles
+     * @throws Exception
+     */
     private void restoreGlobalStyles(Resource sourceRestoreFolder, Resource styles)
             throws Exception {
         for (StyleInfo sty : getCatalog().getStyles()) {
@@ -741,7 +787,11 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
         }
     }
 
-    /** */
+    /**
+     * @param sourceRestoreFolder
+     * @param td
+     * @throws Exception
+     */
     private void restoreGlobalServices(Resource sourceRestoreFolder, GeoServerDataDirectory td)
             throws Exception {
         for (Resource serviceResource : sourceRestoreFolder.get("services").list()) {
@@ -760,7 +810,10 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
         }
     }
 
-    /** */
+    /**
+     * @param workspaces
+     * @throws Exception
+     */
     private void restoreWorkSpacesAndLayers(Resource sourceRestoreFodler, Resource workspaces)
             throws Exception {
         // - Restore Default Workspace
@@ -913,7 +966,10 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
     //
     // GWC Stuff
     // ////////////////////////////////////////////////////////////////////////////////////// //
-    /** */
+    /**
+     * @param targetBackupFolder
+     * @throws Exception
+     */
     private void backupGWCSettings(Resource targetBackupFolder) throws Exception {
         GWCConfigPersister gwcGeoServerConfigPersister =
                 (GWCConfigPersister) GeoServerExtensions.bean("gwcGeoServervConfigPersister");
@@ -1035,6 +1091,11 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
      *
      * <p>1. the securityManager should issue the listeners 2. the GWCInitializer should be
      * re-initialized
+     *
+     * @param sourceRestoreFolder
+     * @param baseDir
+     * @throws Exception
+     * @throws IOException
      */
     private void restoreGWCSettings(Resource sourceRestoreFolder, Resource baseDir)
             throws Exception {
@@ -1089,7 +1150,6 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
 
                 final DefaultTileLayerCatalog gwcRestoreCatalog =
                         new DefaultTileLayerCatalog(resourceLoader, gwcXmlPersisterFactory);
-                gwcRestoreCatalog.initialize();
 
                 Resource gwcCatalogPersistenceLocation =
                         targetGWCProviderRestoreDir
@@ -1110,7 +1170,11 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
         }
     }
 
-    /** */
+    /**
+     * @param gwcCatalog
+     * @param layersByName
+     * @param gwcRestoreCatalog
+     */
     private void restoreGWCTileLayersInfos(
             final TileLayerCatalog gwcCatalog,
             BiMap<String, String> layersByName,
@@ -1158,7 +1222,14 @@ public class CatalogBackupRestoreTasklet extends AbstractCatalogBackupRestoreTas
         }
     }
 
-    /** */
+    /**
+     * @param gwcCatalog
+     * @param layersByName
+     * @param layerName
+     * @param gwcLayerInfo
+     * @param layerInfo
+     * @throws IllegalArgumentException
+     */
     private void restoreGWCTileLayerInfo(
             final TileLayerCatalog gwcCatalog,
             BiMap<String, String> layersByName,

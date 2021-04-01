@@ -7,12 +7,10 @@ package org.geoserver.wfs3;
 import static org.hamcrest.CoreMatchers.both;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.greaterThan;
-import static org.hamcrest.Matchers.startsWith;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThat;
 
 import com.jayway.jsonpath.DocumentContext;
 import java.net.URLEncoder;
@@ -42,21 +40,13 @@ public class FeatureTest extends WFS3TestSupport {
         assertEquals("self", selfRels.get(0));
         // check alternate link
         List alternatefRels = json.read("links[?(@.type == 'application/json')].rel");
-        assertEquals(2, alternatefRels.size());
+        assertEquals(1, alternatefRels.size());
         assertEquals("alternate", alternatefRels.get(0));
-        assertEquals("collection", alternatefRels.get(1));
-        // check collection link
-        List selfLink = json.read("links[?(@.rel == 'collection')].href");
-        assertThat(selfLink.size(), greaterThan(0));
-        assertThat(
-                (String) selfLink.get(0),
-                startsWith(
-                        "http://localhost:8080/geoserver/wfs3/collections/" + roadSegments + "?"));
     }
 
     @Test
     public void testWorkspaceQualified() throws Exception {
-        String roadSegments = MockData.ROAD_SEGMENTS.getLocalPart();
+        String roadSegments = getEncodedName(MockData.ROAD_SEGMENTS);
         DocumentContext json =
                 getAsJSONPath(
                         MockData.ROAD_SEGMENTS.getPrefix()
@@ -70,20 +60,10 @@ public class FeatureTest extends WFS3TestSupport {
         List selfRels = json.read("links[?(@.type == 'application/geo+json')].rel");
         assertEquals(1, selfRels.size());
         assertEquals("self", selfRels.get(0));
-        // check json links
+        // check alternate link
         List alternatefRels = json.read("links[?(@.type == 'application/json')].rel");
-        assertEquals(2, alternatefRels.size());
+        assertEquals(1, alternatefRels.size());
         assertEquals("alternate", alternatefRels.get(0));
-        assertEquals("collection", alternatefRels.get(1));
-        // check collection link
-        List selfLink = json.read("links[?(@.rel == 'collection')].href");
-        assertThat(selfLink.size(), greaterThan(0));
-        assertThat(
-                (String) selfLink.get(0),
-                startsWith(
-                        "http://localhost:8080/geoserver/cite/wfs3/collections/"
-                                + roadSegments
-                                + "?"));
     }
 
     @Test
@@ -193,9 +173,8 @@ public class FeatureTest extends WFS3TestSupport {
         assertEquals(expected, href);
         // check alternate link
         List alternatefRels = json.read("links[?(@.type == 'application/json')].rel");
-        assertEquals(2, alternatefRels.size());
+        assertEquals(1, alternatefRels.size());
         assertEquals("alternate", alternatefRels.get(0));
-        assertEquals("collection", alternatefRels.get(1));
     }
 
     @Test
@@ -368,9 +347,8 @@ public class FeatureTest extends WFS3TestSupport {
             assertEquals(expected, href);
             // check alternate link
             List alternatefRels = json.read("links[?(@.type == 'application/json')].rel");
-            assertEquals(2, alternatefRels.size());
+            assertEquals(1, alternatefRels.size());
             assertEquals("alternate", alternatefRels.get(0));
-            assertEquals("collection", alternatefRels.get(1));
         } finally {
             genericEntity.setName(MockData.GENERICENTITY.getLocalPart());
             getCatalog().save(genericEntity);

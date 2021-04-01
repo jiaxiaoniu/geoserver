@@ -25,7 +25,6 @@ import org.apache.wicket.model.PropertyModel;
 import org.apache.wicket.model.ResourceModel;
 import org.geoserver.catalog.Catalog;
 import org.geoserver.catalog.DataStoreInfo;
-import org.geoserver.catalog.NamespaceInfo;
 import org.geoserver.catalog.ResourcePool;
 import org.geoserver.platform.GeoServerEnvironment;
 import org.geoserver.platform.GeoServerExtensions;
@@ -39,7 +38,6 @@ import org.geoserver.web.data.store.panel.ParamPanel;
 import org.geoserver.web.data.store.panel.PasswordParamPanel;
 import org.geoserver.web.data.store.panel.TextAreaParamPanel;
 import org.geoserver.web.data.store.panel.TextParamPanel;
-import org.geoserver.web.util.EnumAdapterModel;
 import org.geoserver.web.util.MapModel;
 import org.geoserver.web.wicket.FileExistsValidator;
 import org.geotools.data.DataAccessFactory;
@@ -113,16 +111,15 @@ public class DefaultDataStoreEditPanel extends StoreEditPanel {
             }
         }
 
-        final List<String> keys = new ArrayList<>(paramsMetadata.keySet());
-        final IModel<Map<String, Serializable>> paramsModel =
-                new PropertyModel<>(model, "connectionParameters");
+        final List<String> keys = new ArrayList<String>(paramsMetadata.keySet());
+        final IModel paramsModel = new PropertyModel(model, "connectionParameters");
 
-        ListView<String> paramsList =
-                new ListView<String>("parameters", keys) {
+        ListView paramsList =
+                new ListView("parameters", keys) {
                     private static final long serialVersionUID = 1L;
 
                     @Override
-                    protected void populateItem(ListItem<String> item) {
+                    protected void populateItem(ListItem item) {
                         String paramName = item.getDefaultModelObjectAsString();
                         ParamInfo paramMetadata = paramsMetadata.get(paramName);
 
@@ -146,11 +143,11 @@ public class DefaultDataStoreEditPanel extends StoreEditPanel {
     /**
      * Creates a form input component for the given datastore param based on its type and metadata
      * properties.
+     *
+     * @param paramMetadata
      */
-    protected Panel getInputComponent(
-            final String componentId,
-            final IModel<Map<String, Serializable>> paramsModel,
-            final ParamInfo paramMetadata) {
+    private Panel getInputComponent(
+            final String componentId, final IModel paramsModel, final ParamInfo paramMetadata) {
 
         final GeoServerEnvironment gsEnvironment =
                 GeoServerExtensions.bean(GeoServerEnvironment.class);
@@ -164,15 +161,12 @@ public class DefaultDataStoreEditPanel extends StoreEditPanel {
 
         Panel parameterPanel;
         if ("namespace".equals(paramName)) {
-            IModel<NamespaceInfo> namespaceModel = new NamespaceParamModel(paramsModel, paramName);
-            IModel<String> paramLabelModel = new ResourceModel(paramLabel, paramLabel);
+            IModel namespaceModel = new NamespaceParamModel(paramsModel, paramName);
+            IModel paramLabelModel = new ResourceModel(paramLabel, paramLabel);
             parameterPanel = new NamespacePanel(componentId, namespaceModel, paramLabelModel, true);
         } else if (options != null && options.size() > 0) {
 
-            IModel<Serializable> valueModel = new MapModel<>(paramsModel, paramName);
-            if (binding.isEnum()) {
-                valueModel = adaptEnumeration(binding, valueModel);
-            }
+            IModel<Serializable> valueModel = new MapModel(paramsModel, paramName);
             IModel<String> labelModel = new ResourceModel(paramLabel, paramLabel);
             parameterPanel =
                     new DropDownChoiceParamPanel(
@@ -183,14 +177,14 @@ public class DefaultDataStoreEditPanel extends StoreEditPanel {
             parameterPanel =
                     new CheckBoxParamPanel(
                             componentId,
-                            new MapModel<>(paramsModel, paramName),
+                            new MapModel(paramsModel, paramName),
                             new ResourceModel(paramLabel, paramLabel));
 
         } else if (File.class == binding) {
             parameterPanel =
                     new FileParamPanel(
                             componentId,
-                            new MapModel<>(paramsModel, paramName),
+                            new MapModel(paramsModel, paramName),
                             new ResourceModel(paramLabel, paramLabel),
                             required);
 
@@ -198,15 +192,15 @@ public class DefaultDataStoreEditPanel extends StoreEditPanel {
             parameterPanel =
                     new PasswordParamPanel(
                             componentId,
-                            new MapModel<>(paramsModel, paramName),
+                            new MapModel(paramsModel, paramName),
                             new ResourceModel(paramLabel, paramLabel),
                             required);
         } else {
-            IModel<String> model;
+            IModel model;
             if ("url".equalsIgnoreCase(paramName)) {
                 model = new URLModel(paramsModel, paramName);
             } else {
-                model = new MapModel<>(paramsModel, paramName);
+                model = new MapModel(paramsModel, paramName);
             }
 
             Panel tp;
@@ -219,7 +213,7 @@ public class DefaultDataStoreEditPanel extends StoreEditPanel {
                                 required);
             } else {
                 tp =
-                        new TextParamPanel<>(
+                        new TextParamPanel(
                                 componentId,
                                 model,
                                 new ResourceModel(paramLabel, paramLabel),
@@ -227,7 +221,6 @@ public class DefaultDataStoreEditPanel extends StoreEditPanel {
             }
 
             // if it can be a reference to the local filesystem make sure it's valid
-            @SuppressWarnings("unchecked")
             FormComponent<String> fc = ((ParamPanel) tp).getFormComponent();
 
             // AF: Disable Validator if GeoServer Env Parametrization is enabled!
@@ -265,12 +258,6 @@ public class DefaultDataStoreEditPanel extends StoreEditPanel {
         return parameterPanel;
     }
 
-    @SuppressWarnings("unchecked")
-    private IModel<Serializable> adaptEnumeration(
-            Class<?> binding, IModel<Serializable> valueModel) {
-        return new EnumAdapterModel(valueModel, binding);
-    }
-
     private boolean isEmpty(Object value) {
         if (value == null) {
             return true;
@@ -288,14 +275,15 @@ public class DefaultDataStoreEditPanel extends StoreEditPanel {
      *
      * @author aaime
      */
-    static final class URLModel extends MapModel<String> {
+    static final class URLModel extends MapModel {
 
-        URLModel(IModel<Map<String, Serializable>> model, String expression) {
+        URLModel(IModel model, String expression) {
             super(model, expression);
         }
 
         @Override
-        public void setObject(String file) {
+        public void setObject(Object object) {
+            String file = (String) object;
             if (!file.startsWith("file://")
                     && !file.startsWith("file:")
                     && !file.startsWith("http://")

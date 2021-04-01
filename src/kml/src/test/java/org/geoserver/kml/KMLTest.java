@@ -5,21 +5,17 @@
  */
 package org.geoserver.kml;
 
+import static junit.framework.Assert.assertNull;
 import static org.custommonkey.xmlunit.XMLAssert.assertXpathEvaluatesTo;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.isEmptyString;
-import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.util.Arrays;
+import java.util.*;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.zip.ZipEntry;
@@ -29,25 +25,18 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.custommonkey.xmlunit.XMLUnit;
 import org.custommonkey.xmlunit.XpathEngine;
-import org.custommonkey.xmlunit.exceptions.XpathException;
+import org.geoserver.catalog.*;
 import org.geoserver.catalog.Catalog;
-import org.geoserver.catalog.CatalogBuilder;
 import org.geoserver.catalog.FeatureTypeInfo;
-import org.geoserver.catalog.LayerGroupInfo;
-import org.geoserver.catalog.PublishedInfo;
 import org.geoserver.data.test.MockData;
 import org.geoserver.data.test.SystemTestData;
 import org.geoserver.data.test.SystemTestData.LayerProperty;
-import org.geoserver.platform.resource.Resources;
 import org.geoserver.test.RemoteOWSTestSupport;
 import org.geoserver.wms.WMSTestSupport;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.referencing.CRS;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.*;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -93,7 +82,7 @@ public class KMLTest extends WMSTestSupport {
         testData.addStyle("scaleRange", "scaleRange.sld", getClass(), catalog);
         testData.addStyle("outputMode", "outputMode.sld", getClass(), catalog);
         testData.addVectorLayer(
-                STORM_OBS, Collections.emptyMap(), "storm_obs.properties", getClass(), catalog);
+                STORM_OBS, Collections.EMPTY_MAP, "storm_obs.properties", getClass(), catalog);
 
         Map<SystemTestData.LayerProperty, Object> properties =
                 new HashMap<SystemTestData.LayerProperty, Object>();
@@ -390,12 +379,12 @@ public class KMLTest extends WMSTestSupport {
     public void testTimeTemplate() throws Exception {
         FeatureTypeInfo ftInfo =
                 getCatalog().getResourceByName(getLayerId(MockData.OTHER), FeatureTypeInfo.class);
-        File resourceDir = Resources.directory(getDataDirectory().get(ftInfo));
+        File resourceDir = getDataDirectory().findResourceDir(ftInfo);
         File templateFile = new File(resourceDir, "time.ftl");
         try {
             // create the time template
 
-            FileUtils.writeStringToFile(templateFile, "${dates.value}", "UTF-8");
+            FileUtils.writeStringToFile(templateFile, "${dates.value}");
 
             Document doc =
                     getAsDOM(
@@ -419,11 +408,11 @@ public class KMLTest extends WMSTestSupport {
     public void testTimeInvervalTemplate() throws Exception {
         FeatureTypeInfo ftInfo =
                 getCatalog().getResourceByName(getLayerId(MockData.OTHER), FeatureTypeInfo.class);
-        File resourceDir = Resources.directory(getDataDirectory().get(ftInfo));
+        File resourceDir = getDataDirectory().findResourceDir(ftInfo);
         File templateFile = new File(resourceDir, "time.ftl");
         try {
             // create the time template
-            FileUtils.writeStringToFile(templateFile, "${dates.value}||${dates.value}", "UTF-8");
+            FileUtils.writeStringToFile(templateFile, "${dates.value}||${dates.value}");
 
             Document doc =
                     getAsDOM(
@@ -449,11 +438,11 @@ public class KMLTest extends WMSTestSupport {
     public void testHeightTemplate() throws Exception {
         FeatureTypeInfo ftInfo =
                 getCatalog().getResourceByName(getLayerId(MockData.OTHER), FeatureTypeInfo.class);
-        File resourceDir = Resources.directory(getDataDirectory().get(ftInfo));
+        File resourceDir = getDataDirectory().findResourceDir(ftInfo);
         File templateFile = new File(resourceDir, "height.ftl");
         try {
             // create the height template
-            FileUtils.writeStringToFile(templateFile, "200", "UTF-8");
+            FileUtils.writeStringToFile(templateFile, "200");
 
             Document doc =
                     getAsDOM(
@@ -465,36 +454,12 @@ public class KMLTest extends WMSTestSupport {
                                     + "&styles=&height=1024&width=1024&bbox= -96.0000,0.0000,-90.0000,84.0000&srs=EPSG:4326");
 
             // coordinates are reprojected and we get the height at 200
-            assertPointCoordinate(
-                    doc,
+            assertXpathEvaluatesTo(
+                    "-92.99954926766114,4.52401492058674,200.0",
                     "//kml:Placemark/kml:Point/kml:coordinates",
-                    -92.99954926766114,
-                    4.52401492058674,
-                    200.0);
+                    doc);
         } finally {
             assertTrue(templateFile.delete());
-        }
-    }
-
-    /**
-     * Checks that a point's coordinate in the kml doc matches the expected value
-     *
-     * @param doc The KML doc
-     * @param path The xpath leading to the coordinate
-     * @param expected The expected ordinate values
-     */
-    public static void assertPointCoordinate(Document doc, String path, double... expected)
-            throws XpathException {
-        XpathEngine xpath = XMLUnit.newXpathEngine();
-        String coordinates = xpath.evaluate(path, doc);
-        assertThat(coordinates, not(isEmptyString()));
-        double[] ordinates =
-                Arrays.stream(coordinates.split("\\s*,\\s*"))
-                        .mapToDouble(Double::parseDouble)
-                        .toArray();
-        assertEquals(expected.length, ordinates.length);
-        for (int i = 0; i < expected.length; i++) {
-            assertEquals(expected[i], ordinates[i], 1e-6);
         }
     }
 

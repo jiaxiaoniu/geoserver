@@ -82,13 +82,9 @@ public abstract class RemoteProcessClient implements DisposableBean, ExtensionPr
     protected List<RemoteMachineDescriptor> registeredProcessingMachines =
             Collections.synchronizedList(new ArrayList<RemoteMachineDescriptor>());
 
-    /** Queue of WPS Requests GeoServer will test on Remote endpoints */
-    private List<RemoteRequestDescriptor> pendingRequests =
+    /** */
+    protected List<RemoteRequestDescriptor> pendingRequests =
             Collections.synchronizedList(new LinkedList<RemoteRequestDescriptor>());
-
-    /** Execution Requests in charge from the RemoteProcessClient <pID; Request> */
-    private Map<String, RemoteRequestDescriptor> executingRequests =
-            new ConcurrentHashMap<String, RemoteRequestDescriptor>();
 
     /** */
     protected File certificateFile = null;
@@ -96,7 +92,11 @@ public abstract class RemoteProcessClient implements DisposableBean, ExtensionPr
     /** */
     protected String certificatePassword = null;
 
-    /** The default Cosntructor */
+    /**
+     * The default Cosntructor
+     *
+     * @param remoteProcessFactory
+     */
     public RemoteProcessClient(
             RemoteProcessFactoryConfigurationWatcher remoteProcessFactoryConfigurationWatcher,
             boolean enabled,
@@ -127,16 +127,6 @@ public abstract class RemoteProcessClient implements DisposableBean, ExtensionPr
         return remoteClientListeners;
     }
 
-    /** @return the pendingRequests */
-    public List<RemoteRequestDescriptor> getPendingRequests() {
-        return pendingRequests;
-    }
-
-    /** @return the executingRequests */
-    public Map<String, RemoteRequestDescriptor> getExecutingRequests() {
-        return executingRequests;
-    }
-
     /** @param enabled the enabled to set */
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
@@ -163,12 +153,21 @@ public abstract class RemoteProcessClient implements DisposableBean, ExtensionPr
         return priority;
     }
 
-    /** Set the KeyStore Certificate Path */
+    /**
+     * Set the KeyStore Certificate Path
+     *
+     * @param certificateFile
+     * @throws IOException
+     */
     public void setCertificateFile(Resource certificateFile) throws IOException {
         this.certificateFile = certificateFile.getFile();
     }
 
-    /** Set the KeyStore Certificate Password */
+    /**
+     * Set the KeyStore Certificate Password
+     *
+     * @param certificatePassword
+     */
     public void setCertificatePassword(String certificatePassword) {
         this.certificatePassword = certificatePassword;
     }
@@ -178,27 +177,50 @@ public abstract class RemoteProcessClient implements DisposableBean, ExtensionPr
         this.priority = priority;
     }
 
-    /** Registers the {@link RemoteProcessFactoryListener} remoteClientListeners */
+    /**
+     * Registers the {@link RemoteProcessFactoryListener} remoteClientListeners
+     *
+     * @param listener
+     */
     public void registerProcessFactoryListener(RemoteProcessFactoryListener listener) {
         remoteFactoryListeners.add(listener);
     }
 
-    /** De-registers the {@link RemoteProcessFactoryListener} remoteClientListeners */
+    /**
+     * De-registers the {@link RemoteProcessFactoryListener} remoteClientListeners
+     *
+     * @param listener
+     */
     public void deregisterProcessFactoryListener(RemoteProcessFactoryListener listener) {
         remoteFactoryListeners.remove(listener);
     }
 
-    /** Registers the {@link RemoteProcessClientListener} remoteClientListeners */
+    /**
+     * Registers the {@link RemoteProcessClientListener} remoteClientListeners
+     *
+     * @param listener
+     */
     public void registerProcessClientListener(RemoteProcessClientListener listener) {
         remoteClientListeners.add(listener);
     }
 
-    /** De-registers the {@link RemoteProcessClientListener} remoteClientListeners */
+    /**
+     * De-registers the {@link RemoteProcessClientListener} remoteClientListeners
+     *
+     * @param listener
+     */
     public void deregisterProcessClientListener(RemoteProcessClientListener listener) {
         remoteClientListeners.remove(listener);
     }
 
-    /** Invoke the {@link RemoteProcessClient} execution */
+    /**
+     * Invoke the {@link RemoteProcessClient} execution
+     *
+     * @param name
+     * @param input
+     * @param metadata
+     * @param monitor
+     */
     public abstract String execute(
             Name name,
             Map<String, Object> input,
@@ -216,7 +238,10 @@ public abstract class RemoteProcessClient implements DisposableBean, ExtensionPr
         return (Importer) GeoServerExtensions.bean("importer");
     }
 
-    /** */
+    /**
+     * @param wsName
+     * @param dsName
+     */
     public DataStoreInfo createH2DataStore(String wsName, String dsName) {
         // create a datastore to import into
         Catalog cat = getGeoServer().getCatalog();
@@ -242,7 +267,11 @@ public abstract class RemoteProcessClient implements DisposableBean, ExtensionPr
         return ds;
     }
 
-    /** */
+    /**
+     * @param metadata
+     * @param value
+     * @throws IOException
+     */
     public LayerInfo importLayer(
             File file,
             String type,
@@ -437,6 +466,7 @@ public abstract class RemoteProcessClient implements DisposableBean, ExtensionPr
      *     that will be imported have been chosen.
      *
      * @param resourceInfo The resource to calculate the bounds for
+     * @param catalog
      */
     protected void calculateBounds(ResourceInfo resourceInfo, Catalog catalog) throws IOException {
         if (resourceInfo.getNativeBoundingBox() == null

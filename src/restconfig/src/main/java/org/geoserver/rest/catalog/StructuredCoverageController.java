@@ -38,10 +38,10 @@ import org.geotools.coverage.grid.io.StructuredGridCoverage2DReader;
 import org.geotools.data.Query;
 import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.factory.CommonFactoryFinder;
+import org.geotools.factory.Hints;
 import org.geotools.feature.FeatureTypes;
 import org.geotools.filter.text.cql2.CQLException;
 import org.geotools.filter.text.ecql.ECQL;
-import org.geotools.util.factory.Hints;
 import org.geotools.util.logging.Logging;
 import org.opengis.feature.simple.SimpleFeatureType;
 import org.opengis.feature.type.AttributeDescriptor;
@@ -150,14 +150,10 @@ public class StructuredCoverageController extends AbstractCatalogController {
             @PathVariable String storeName,
             @PathVariable String coverageName,
             @RequestParam(name = "filter", required = false) String filter,
-            @RequestParam(name = "purge", required = false, defaultValue = "none") String purge,
-            @RequestParam(name = "updateBBox", required = false) Boolean updateBBox)
+            @RequestParam(name = "purge", required = false, defaultValue = "none") String purge)
             throws IOException {
-
-        if (updateBBox == null) updateBBox = false;
         Query q = toQuery(filter, 0, 1);
-        granulesDeleteInternal(
-                workspaceName, storeName, coverageName, purge, q.getFilter(), updateBBox);
+        granulesDeleteInternal(workspaceName, storeName, coverageName, purge, q.getFilter());
     }
 
     /*
@@ -223,15 +219,13 @@ public class StructuredCoverageController extends AbstractCatalogController {
             @PathVariable String storeName,
             @PathVariable String coverageName,
             @PathVariable String granuleId,
-            @RequestParam(name = "purge", required = false, defaultValue = "none") String purge,
-            @RequestParam(name = "updateBBox", required = false) Boolean updateBBox)
+            @RequestParam(name = "purge", required = false, defaultValue = "none") String purge)
             throws IOException {
 
-        if (updateBBox == null) updateBBox = false;
         // gsConfig allows for weird calls, like granules/granule.id/.json
         Filter filter = getGranuleIdFilter(granuleId);
 
-        granulesDeleteInternal(workspaceName, storeName, coverageName, purge, filter, updateBBox);
+        granulesDeleteInternal(workspaceName, storeName, coverageName, purge, filter);
     }
 
     private void granulesDeleteInternal(
@@ -239,8 +233,7 @@ public class StructuredCoverageController extends AbstractCatalogController {
             String storeName,
             String coverageName,
             String purge,
-            Filter filter,
-            boolean updateBBox)
+            Filter filter)
             throws IOException {
         GranuleStore store = getGranuleStore(workspaceName, storeName, coverageName);
         if (purge != null) {
@@ -249,12 +242,6 @@ public class StructuredCoverageController extends AbstractCatalogController {
             store.removeGranules(filter, hints);
         } else {
             store.removeGranules(filter);
-        }
-        if (updateBBox) {
-            // before updating checks that the delete request
-            // has not been performed over all granules
-            if (filter == null || (!filter.equals(Filter.INCLUDE)))
-                new MosaicInfoBBoxHandler(catalog).updateNativeBBox(workspaceName, storeName, null);
         }
     }
 

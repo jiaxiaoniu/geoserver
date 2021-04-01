@@ -234,6 +234,10 @@ public abstract class BaseQosXmlEncoder {
 
     /**
      * <ows:Range> <ows:MaximumValue>256</ows:MaximumValue> <ows:MinimumValue>256</ows:MinimumValue>
+     *
+     * @param tx
+     * @param min
+     * @param max
      */
     public void encodeOwsRange(Translator tx, String min, String max) {
         tx.start(owsPrefix() + ":" + OWS_RANGE_TAG);
@@ -250,7 +254,12 @@ public abstract class BaseQosXmlEncoder {
         tx.end(owsPrefix() + ":" + OWS_RANGE_TAG);
     }
 
-    /** <ows:Value>Vesienhoitoalueet</ows:Value> */
+    /**
+     * <ows:Value>Vesienhoitoalueet</ows:Value>
+     *
+     * @param tx
+     * @param value
+     */
     public void encodeOwsValue(Translator tx, String value) {
         tx.start(owsPrefix() + ":" + OWS_VALUE_TAG);
         tx.chars(value);

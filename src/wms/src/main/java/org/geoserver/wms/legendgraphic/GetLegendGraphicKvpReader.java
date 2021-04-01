@@ -16,7 +16,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -29,8 +28,6 @@ import org.geoserver.catalog.LayerInfo;
 import org.geoserver.catalog.LegendInfo;
 import org.geoserver.catalog.PublishedType;
 import org.geoserver.catalog.StyleInfo;
-import org.geoserver.catalog.WMSLayerInfo;
-import org.geoserver.catalog.WMSStoreInfo;
 import org.geoserver.catalog.impl.LegendInfoImpl;
 import org.geoserver.config.GeoServerDataDirectory;
 import org.geoserver.ows.KvpRequestReader;
@@ -38,25 +35,23 @@ import org.geoserver.ows.util.KvpUtils;
 import org.geoserver.platform.GeoServerResourceLoader;
 import org.geoserver.platform.ServiceException;
 import org.geoserver.platform.resource.Resource;
-import org.geoserver.wms.CascadedLegendRequest;
 import org.geoserver.wms.GetLegendGraphicRequest;
 import org.geoserver.wms.GetLegendGraphicRequest.LegendRequest;
 import org.geoserver.wms.MapLayerInfo;
 import org.geoserver.wms.WMS;
 import org.geotools.coverage.grid.io.GridCoverage2DReader;
-import org.geotools.coverage.util.FeatureUtilities;
 import org.geotools.data.simple.SimpleFeatureCollection;
-import org.geotools.data.util.NullProgressListener;
 import org.geotools.factory.CommonFactoryFinder;
+import org.geotools.factory.FactoryRegistryException;
+import org.geotools.factory.GeoTools;
 import org.geotools.feature.SchemaException;
-import org.geotools.ows.wms.WebMapServer;
+import org.geotools.resources.coverage.FeatureUtilities;
+import org.geotools.styling.SLDParser;
 import org.geotools.styling.Style;
 import org.geotools.styling.StyleFactory;
+import org.geotools.util.NullProgressListener;
 import org.geotools.util.URLs;
-import org.geotools.util.factory.FactoryRegistryException;
-import org.geotools.util.factory.GeoTools;
 import org.geotools.util.logging.Logging;
-import org.geotools.xml.styling.SLDParser;
 import org.opengis.feature.type.FeatureType;
 import org.opengis.feature.type.Name;
 import org.opengis.referencing.operation.TransformException;
@@ -96,6 +91,7 @@ public class GetLegendGraphicKvpReader extends KvpRequestReader {
     /**
      * Creates a new GetLegendGraphicKvpReader object.
      *
+     * @param params map of key/value pairs with the parameters for a GetLegendGraphic request
      * @param wms WMS config object.
      */
     public GetLegendGraphicKvpReader(WMS wms) {
@@ -159,15 +155,10 @@ public class GetLegendGraphicKvpReader extends KvpRequestReader {
             try {
                 LayerInfo layerInfo = wms.getLayerByName(layer);
                 if (layerInfo != null) {
-                    LegendRequest legend = null;
-                    // for WMS cascaded layer
-                    if (layerInfo.getResource() instanceof WMSLayerInfo)
-                        legend = getCascadeLegendRequest(layerInfo, request);
-                    else {
-                        // layer found, fill in LegendRequest details
-                        legend = addLayer(layerInfo, request);
-                    }
+                    // layer found, fill in LegendRequest details
+                    LegendRequest legend = addLayer(layerInfo, request);
                     legend.setLayer(layer);
+
                     layers.add(legend);
                     infoObject = layerInfo;
                 } else {
@@ -176,13 +167,9 @@ public class GetLegendGraphicKvpReader extends KvpRequestReader {
                     if (layerGroupInfo != null) {
                         // add all single layers of the group
                         for (LayerInfo singleLayer : layerGroupInfo.layers()) {
-                            LegendRequest legend = null;
-                            // for WMS cascaded layer
-                            if (singleLayer.getResource() instanceof WMSLayerInfo)
-                                legend = getCascadeLegendRequest(singleLayer, request);
-                            else legend = addLayer(singleLayer, request);
-
+                            LegendRequest legend = addLayer(singleLayer, request);
                             legend.setLayerGroupInfo(layerGroupInfo);
+
                             layers.add(legend);
                         }
                         infoObject = layerGroupInfo;
@@ -201,7 +188,7 @@ public class GetLegendGraphicKvpReader extends KvpRequestReader {
         } else {
             // Assume this is "just" a request for a legend graphic representing for a style (no
             // infoObject for context)
-            LegendRequest styleLegend = new LegendRequest();
+            LegendRequest styleLegend = request.new LegendRequest();
             layers.add(styleLegend);
         }
         request.getLegends().addAll(layers);
@@ -220,6 +207,23 @@ public class GetLegendGraphicKvpReader extends KvpRequestReader {
         try {
             // Parse optional parameters into legend data structure created above
             parseOptionalParameters(request, infoObject, rawKvp);
+
+            if (request.getLayers().size() != request.getStyles().size()) {
+                String msg =
+                        layers.size()
+                                + " layers requested, but found "
+                                + request.getStyles().size()
+                                + " styles specified. ";
+                throw new ServiceException(msg, getClass().getName());
+            }
+            if (request.getRules().size() > 0 && layers.size() != request.getRules().size()) {
+                String msg =
+                        layers.size()
+                                + " layers requested, but found "
+                                + request.getRules().size()
+                                + " rules specified. ";
+                throw new ServiceException(msg, getClass().getName());
+            }
         } catch (IOException e) {
             throw new ServiceException(e);
         }
@@ -228,63 +232,25 @@ public class GetLegendGraphicKvpReader extends KvpRequestReader {
     }
 
     /**
-     * Create a Legend request to fetch Legend from cascaded WMS service
-     *
-     * @param layerInfo of Cascaded Layer, should WMSLayerInfo
-     * @param request should be instance of GetLegendGraphicRequest
-     * @return GetCascadedLegendGraphicRequest
-     */
-    private LegendRequest getCascadeLegendRequest(
-            LayerInfo layerInfo, GetLegendGraphicRequest request) throws IOException {
-        WMSLayerInfo wmsLayerInfo = (WMSLayerInfo) layerInfo.getResource();
-        WMSStoreInfo wmsStoreInfo = wmsLayerInfo.getStore();
-        WebMapServer wmsServer = wmsStoreInfo.getWebMapServer(null);
-
-        org.geotools.ows.wms.request.GetLegendGraphicRequest remoteLegendGraphicRequest;
-
-        if (wmsServer.getCapabilities().getVersion().equalsIgnoreCase("1.3.0")) {
-            // WebMapServer under 1.3.0 version does not create GetLegendGraphicRequest
-            // since the XML tag <GetLegendGraphic> is not present under the <Capability>
-            // HACK HACK HACK
-            // taking a 1.3.0 GetMap request and forcefully turning it into a GetLegend Request
-            remoteLegendGraphicRequest =
-                    new CascadedLegendRequest.GetLegendGraphicRequestV1_3_0(
-                            wmsServer.createGetMapRequest().getFinalURL(), "1.3.0");
-            remoteLegendGraphicRequest.toString();
-
-        } else {
-            // other than 1.3.0
-            remoteLegendGraphicRequest = wmsServer.createGetLegendGraphicRequest();
-        }
-
-        // setting up remote request
-        remoteLegendGraphicRequest.setLayer(wmsLayerInfo.getNativeName());
-
-        CascadedLegendRequest legend = new CascadedLegendRequest(request);
-
-        legend.setRemoteLegendGraphicRequest(remoteLegendGraphicRequest);
-        legend.setLayer(layerInfo.getName());
-        legend.setTitle(layerInfo.getTitle());
-        legend.setLayerInfo(layerInfo);
-
-        return legend;
-    }
-
-    /**
      * Creates a new layer for the current list of layers to be drawn on the legend.
      *
      * <p>Additional LayerInfo details such as title and legend are filled in if available.
      *
      * @param layerInfo The layer description
-     * @param request The GetLegendGrapicRequest used for context
+     * @param req The GetLegendGrapicRequest used for context
      * @return created LegendRequest
+     * @throws FactoryRegistryException
+     * @throws IOException
+     * @throws TransformException
+     * @throws SchemaException
      */
     private LegendRequest addLayer(LayerInfo layerInfo, GetLegendGraphicRequest request)
             throws FactoryRegistryException, IOException, TransformException, SchemaException {
         FeatureType featureType = getLayerFeatureType(layerInfo);
         if (featureType != null) {
             LegendRequest legend =
-                    new LegendRequest(featureType, layerInfo.getResource().getQualifiedName());
+                    request
+                    .new LegendRequest(featureType, layerInfo.getResource().getQualifiedName());
             legend.setLayerInfo(layerInfo);
 
             MapLayerInfo mli = new MapLayerInfo(layerInfo);
@@ -329,7 +295,7 @@ public class GetLegendGraphicKvpReader extends KvpRequestReader {
      * @param legendInfo LegendInfo used to document use external graphic
      * @return Copy of provided legend info resolved to local file references.
      */
-    public LegendInfo resolveLegendInfo(
+    private LegendInfo resolveLegendInfo(
             LegendInfo legendInfo, GetLegendGraphicRequest request, StyleInfo context) {
         if (legendInfo == null) {
             return null; // not available
@@ -393,6 +359,10 @@ public class GetLegendGraphicKvpReader extends KvpRequestReader {
      *
      * @param layerInfo vector or raster layer
      * @return the FeatureType for the given layer
+     * @throws IOException
+     * @throws FactoryRegistryException
+     * @throws TransformException
+     * @throws SchemaException
      */
     private FeatureType getLayerFeatureType(LayerInfo layerInfo)
             throws IOException, FactoryRegistryException, TransformException, SchemaException {
@@ -437,6 +407,7 @@ public class GetLegendGraphicKvpReader extends KvpRequestReader {
      * @param req The request to set the properties to.
      * @param infoObj a {@link LayerInfo layer} or a {@link LayerGroupInfo layerGroup} for which the
      *     legend graphic is to be produced, from where to extract the style information.
+     * @throws IOException
      * @task TODO: validate EXCEPTIONS parameter
      */
     private void parseOptionalParameters(GetLegendGraphicRequest req, Object infoObj, Map rawKvp)
@@ -454,6 +425,10 @@ public class GetLegendGraphicKvpReader extends KvpRequestReader {
      *
      * <p>As I don't completely understand which takes priority over which from the spec, I assume
      * the precedence order as follow: SLD, SLD_BODY, STYLE, in decrecent order of precedence.
+     *
+     * @param req
+     * @param ftype
+     * @throws IOException
      */
     private void parseStyleAndRule(GetLegendGraphicRequest req, Object infoObj, Map rawKvp)
             throws IOException {
@@ -566,25 +541,13 @@ public class GetLegendGraphicKvpReader extends KvpRequestReader {
             }
         }
 
-        Iterator<Style> stylesIterator = sldStyles.iterator();
-        for (LegendRequest legend1 : req.getLegends()) {
-            if (!stylesIterator.hasNext()) {
-                break; // no more styles
-            }
-            legend1.setStyle(stylesIterator.next());
-        }
+        req.setStyles(sldStyles);
 
         String rule = (String) rawKvp.get("RULE");
 
         if (rule != null) {
             List<String> ruleNames = KvpUtils.readFlat(rule);
-            Iterator<String> s = ruleNames.iterator();
-            for (LegendRequest legend : req.getLegends()) {
-                if (!s.hasNext()) {
-                    break; // no more styles
-                }
-                legend.setRule(s.next());
-            }
+            req.setRules(ruleNames);
         }
     }
 
@@ -674,17 +637,19 @@ public class GetLegendGraphicKvpReader extends KvpRequestReader {
      *     parsing error occurs
      */
     private Style[] loadRemoteStyle(String sldUrl) throws ServiceException {
+        InputStream in;
+
         try {
             URL url = new URL(sldUrl);
-            try (InputStream in = url.openStream()) {
-                return parseSld(new InputStreamReader(in));
-            }
+            in = url.openStream();
         } catch (MalformedURLException e) {
             throw new ServiceException(
                     e, "Not a valid URL to an SLD document " + sldUrl, "loadRemoteStyle");
         } catch (IOException e) {
             throw new ServiceException(e, "Can't open the SLD URL " + sldUrl, "loadRemoteStyle");
         }
+
+        return parseSld(new InputStreamReader(in));
     }
 
     /**

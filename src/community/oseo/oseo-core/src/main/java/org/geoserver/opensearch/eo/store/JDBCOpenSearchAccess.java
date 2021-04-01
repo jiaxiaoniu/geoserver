@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
 import org.geoserver.config.GeoServer;
 import org.geoserver.opensearch.eo.ProductClass;
+import org.geotools.data.DataSourceException;
 import org.geotools.data.DataStore;
 import org.geotools.data.DataUtilities;
 import org.geotools.data.FeatureSource;
@@ -39,6 +40,7 @@ import org.geotools.feature.NameImpl;
 import org.geotools.feature.SchemaException;
 import org.geotools.feature.TypeBuilder;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
+import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.filter.text.cql2.CQLException;
 import org.geotools.filter.text.ecql.ECQL;
 import org.geotools.jdbc.JDBCDataStore;
@@ -174,10 +176,13 @@ public class JDBCOpenSearchAccess implements OpenSearchAccess {
         typeBuilder.add(metadataDescriptor);
 
         // adding the layer publishing property
-        Name layerPropertyName = new NameImpl(this.namespaceURI, OpenSearchAccess.LAYERS);
+        Name layerPropertyName = new NameImpl(this.namespaceURI, OpenSearchAccess.LAYER);
         AttributeDescriptor layerDescriptor =
-                buildFeatureListDescriptor(
-                        LAYERS_PROPERTY_NAME, delegate.getSchema("collection_ogclink"));
+                buildFeatureDescriptor(
+                        layerPropertyName,
+                        buildCollectionLayerFeatureType(layerPropertyName),
+                        0,
+                        1);
         typeBuilder.add(layerDescriptor);
 
         // map OGC links
@@ -189,6 +194,25 @@ public class JDBCOpenSearchAccess implements OpenSearchAccess {
         typeBuilder.setName(COLLECTION);
         typeBuilder.setNamespaceURI(namespaceURI);
         return typeBuilder.feature();
+    }
+
+    protected SimpleFeatureType buildCollectionLayerFeatureType(Name name) throws IOException {
+        SimpleFeatureType source = getDelegateStore().getSchema("collection_layer");
+        try {
+            SimpleFeatureTypeBuilder b = new SimpleFeatureTypeBuilder();
+            for (AttributeDescriptor ad : source.getAttributeDescriptors()) {
+                if ("bands".equals(ad.getLocalName()) || "browseBands".equals(ad.getLocalName())) {
+                    b.add(ad.getLocalName(), String[].class);
+                } else {
+                    b.add(ad);
+                }
+            }
+
+            b.setName(name);
+            return b.buildFeatureType();
+        } catch (Exception e) {
+            throw new DataSourceException("Could not build the renamed feature type.", e);
+        }
     }
 
     private AttributeDescriptor buildSimpleDescriptor(Name name, Class binding) {
@@ -290,7 +314,12 @@ public class JDBCOpenSearchAccess implements OpenSearchAccess {
                 .collect(Collectors.toList());
     }
 
-    /** Returns the store from the repository (which is based on GeoServer own resource pool) */
+    /**
+     * Returns the store from the repository (which is based on GeoServer own resource pool)
+     *
+     * @return
+     * @throws IOException
+     */
     DataStore getDelegateStore() throws IOException {
         DataStore store = getRawDelegateStore();
         if (delegateStoreCache != null && delegateStoreCache.wraps(store)) {
@@ -337,54 +366,41 @@ public class JDBCOpenSearchAccess implements OpenSearchAccess {
 
         getCollectionPublishingConfigurations()
                 .forEach(
-                        (name, layers) -> {
-                            if (layers != null && !layers.isEmpty()) {
-                                for (CollectionLayer layer : layers) {
-                                    setupLayerFeatureTypes(names, name, layer);
+                        (name, layer) -> {
+                            if (layer != null
+                                    && layer.isSeparateBands()
+                                    && layer.getBands() != null
+                                    && layer.getBands().length > 0) {
+                                // one feature type per band needed to setup a coverage view
+                                for (String band : layer.getBands()) {
+                                    names.add(
+                                            new NameImpl(
+                                                    namespaceURI,
+                                                    name
+                                                            + OpenSearchAccess.BAND_LAYER_SEPARATOR
+                                                            + band));
                                 }
                             } else {
-                                // a single feature type per collection
+                                // a single feature type per
                                 names.add(new NameImpl(namespaceURI, name));
                             }
                         });
         return new ArrayList<>(names);
     }
 
-    private void setupLayerFeatureTypes(
-            LinkedHashSet<Name> names, String name, CollectionLayer layer) {
-        if (layer != null
-                && layer.isSeparateBands()
-                && layer.getBands() != null
-                && layer.getBands().length > 0) {
-            // one feature type per band needed to setup a coverage view
-            for (String band : layer.getBands()) {
-                names.add(
-                        new NameImpl(
-                                namespaceURI, name + OpenSearchAccess.BAND_LAYER_SEPARATOR + band));
-            }
-        } else {
-            names.add(new NameImpl(namespaceURI, name));
-        }
-    }
-
-    private Map<String, List<CollectionLayer>> getCollectionPublishingConfigurations()
+    private Map<String, CollectionLayer> getCollectionPublishingConfigurations()
             throws IOException {
         FeatureSource<FeatureType, Feature> collectionSource = getCollectionSource();
         Query query = new Query(collectionSource.getName().getLocalPart());
-        query.setPropertyNames(new String[] {COLLECTION_NAME, LAYERS});
+        query.setPropertyNames(new String[] {COLLECTION_NAME, LAYER});
         FeatureCollection<FeatureType, Feature> features = collectionSource.getFeatures(query);
-        Map<String, List<CollectionLayer>> result = new LinkedHashMap<>();
+        Map<String, CollectionLayer> result = new LinkedHashMap<>();
         features.accepts(
                 f -> {
                     Property p = f.getProperty(COLLECTION_NAME);
                     String name = (String) p.getValue();
-                    List<CollectionLayer> configs = null;
-                    try {
-                        configs = CollectionLayer.buildCollectionLayersFromFeature(f);
-                        result.put(name, configs);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
+                    CollectionLayer config = CollectionLayer.buildCollectionLayerFromFeature(f);
+                    result.put(name, config);
                 },
                 null);
         return result;
@@ -733,17 +749,6 @@ public class JDBCOpenSearchAccess implements OpenSearchAccess {
         } catch (SchemaException e) {
             throw new IOException(e);
         }
-    }
-
-    @Override
-    public SimpleFeatureType getCollectionLayerSchema() throws IOException {
-        return new JDBCCollectionFeatureStore(this, collectionFeatureType)
-                .getCollectionLayerSchema();
-    }
-
-    @Override
-    public SimpleFeatureType getOGCLinksSchema() throws IOException {
-        return new JDBCCollectionFeatureStore(this, collectionFeatureType).getOGCLinksSchema();
     }
 
     void clearFeatureSourceCaches() {

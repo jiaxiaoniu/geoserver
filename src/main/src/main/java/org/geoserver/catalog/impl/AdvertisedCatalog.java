@@ -67,6 +67,8 @@ public class AdvertisedCatalog extends AbstractFilteredCatalog {
         /**
          * Returns the original layers, including the advertised ones. Use this method only if
          * strictly necessary (current use case, figuring out if the group is queryable or not)
+         *
+         * @return
          */
         public List<PublishedInfo> getOriginalLayers() {
             return delegate.getLayers();
@@ -75,12 +77,18 @@ public class AdvertisedCatalog extends AbstractFilteredCatalog {
         /**
          * Returns the original styles, including the advertised ones. Use this method only if
          * strictly necessary (current use case, figuring out if the group is queryable or not)
+         *
+         * @return
          */
         public List<StyleInfo> getOriginalStyles() {
             return delegate.getStyles();
         }
 
-        /** Returns the delegate. Thread carefully when using this! */
+        /**
+         * Returns the delegate. Thread carefully when using this!
+         *
+         * @return
+         */
         public LayerGroupInfo unwrap() {
             return delegate;
         }
@@ -93,12 +101,20 @@ public class AdvertisedCatalog extends AbstractFilteredCatalog {
         super(catalog);
     }
 
-    /** Set LayerGroup visibility policy. */
+    /**
+     * Set LayerGroup visibility policy.
+     *
+     * @param layerGroupPolicy
+     */
     public void setLayerGroupVisibilityPolicy(LayerGroupVisibilityPolicy layerGroupPolicy) {
         this.layerGroupPolicy = layerGroupPolicy;
     }
 
-    /** Hide Layer if Request is GetCapabilities and Layer or its Resource are not advertised. */
+    /**
+     * Hide Layer if Request is GetCapabilities and Layer or its Resource are not advertised.
+     *
+     * @param layer
+     */
     private boolean hideLayer(LayerInfo layer) {
         if (!layer.isAdvertised()) {
             return checkCapabilitiesRequest(layer.getResource());
@@ -107,7 +123,11 @@ public class AdvertisedCatalog extends AbstractFilteredCatalog {
         }
     }
 
-    /** Hide Resource if it's not advertised and Request is GetCapabilities. */
+    /**
+     * Hide Resource if it's not advertised and Request is GetCapabilities.
+     *
+     * @param resource
+     */
     private boolean hideResource(ResourceInfo resource) {
         if (!resource.isAdvertised()) {
             return checkCapabilitiesRequest(resource);
@@ -168,7 +188,7 @@ public class AdvertisedCatalog extends AbstractFilteredCatalog {
 
         // do not go and check every layer if the request is not a GetCapabilities
         Request request = Dispatcher.REQUEST.get();
-        if (request == null || (!"GetCapabilities".equalsIgnoreCase(request.getRequest()))) {
+        if (request == null || !"GetCapabilities".equalsIgnoreCase(request.getRequest())) {
             return group;
         }
 
@@ -176,9 +196,6 @@ public class AdvertisedCatalog extends AbstractFilteredCatalog {
         final List<StyleInfo> styles = group.getStyles();
         final List<PublishedInfo> filteredLayers = new ArrayList<>();
         final List<StyleInfo> filteredStyles = new ArrayList<>();
-        if (!group.isAdvertised()) {
-            return null; // new AdvertisedLayerGroup(group, filteredLayers, filteredStyles);
-        }
         for (int i = 0; i < layers.size(); i++) {
             PublishedInfo p = layers.get(i);
             StyleInfo style = (styles != null && styles.size() > i) ? styles.get(i) : null;
@@ -329,7 +346,8 @@ public class AdvertisedCatalog extends AbstractFilteredCatalog {
     @Override
     public void save(LayerGroupInfo layerGroup) {
         if (layerGroup instanceof AdvertisedLayerGroup) {
-            AdvertisedLayerGroup decorator = (AdvertisedLayerGroup) layerGroup;
+            AbstractDecorator<LayerGroupInfo> decorator =
+                    (AbstractDecorator<LayerGroupInfo>) layerGroup;
             LayerGroupInfo unwrapped = decorator.unwrap(LayerGroupInfo.class);
             delegate.save(unwrapped);
         } else {

@@ -11,7 +11,6 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.net.URI;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Iterator;
 import java.util.List;
@@ -21,16 +20,15 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import javax.xml.namespace.QName;
-import net.opengis.fes20.AbstractQueryExpressionType;
 import net.opengis.wfs.XlinkPropertyNameType;
-import net.opengis.wfs20.QueryType;
 import net.opengis.wfs20.ResultTypeType;
 import net.opengis.wfs20.StoredQueryType;
+import net.sf.cglib.proxy.Enhancer;
+import net.sf.cglib.proxy.LazyLoader;
 import org.geoserver.catalog.AttributeTypeInfo;
 import org.geoserver.catalog.Catalog;
 import org.geoserver.catalog.FeatureTypeInfo;
 import org.geoserver.catalog.Predicates;
-import org.geoserver.catalog.ProjectionPolicy;
 import org.geoserver.catalog.ResourcePool;
 import org.geoserver.feature.TypeNameExtractingVisitor;
 import org.geoserver.ows.Dispatcher;
@@ -50,7 +48,7 @@ import org.geotools.data.DataUtilities;
 import org.geotools.data.FeatureSource;
 import org.geotools.data.Join;
 import org.geotools.data.simple.SimpleFeatureCollection;
-import org.geotools.data.wfs.WFSDataStoreFactory;
+import org.geotools.factory.Hints;
 import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.NameImpl;
 import org.geotools.feature.SchemaException;
@@ -69,8 +67,7 @@ import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.gml3.GML;
 import org.geotools.referencing.CRS;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
-import org.geotools.util.factory.Hints;
-import org.geotools.xsd.Encoder;
+import org.geotools.xml.Encoder;
 import org.locationtech.jts.geom.Polygon;
 import org.opengis.feature.Feature;
 import org.opengis.feature.simple.SimpleFeatureType;
@@ -117,11 +114,7 @@ import org.opengis.filter.temporal.Ends;
 import org.opengis.filter.temporal.TContains;
 import org.opengis.filter.temporal.TEquals;
 import org.opengis.metadata.extent.GeographicBoundingBox;
-import org.opengis.referencing.FactoryException;
-import org.opengis.referencing.NoSuchAuthorityCodeException;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
-import org.springframework.cglib.proxy.Enhancer;
-import org.springframework.cglib.proxy.LazyLoader;
 import org.xml.sax.helpers.NamespaceSupport;
 
 /**
@@ -223,7 +216,11 @@ public class GetFeature {
         return wfs;
     }
 
-    /** Sets the filter factory to use to create filters. */
+    /**
+     * Sets the filter factory to use to create filters.
+     *
+     * @param filterFactory
+     */
     public void setFilterFactory(FilterFactory2 filterFactory) {
         this.filterFactory = filterFactory;
     }
@@ -376,8 +373,7 @@ public class GetFeature {
                 !(("1.0".equals(request.getVersion()) || "1.0.0".equals(request.getVersion()))
                         && (queries.size() == 1 || maxFeatures == Integer.MAX_VALUE));
 
-        List<FeatureCollection<? extends FeatureType, ? extends Feature>> results =
-                new ArrayList<>();
+        List results = new ArrayList();
         final List<CountExecutor> totalCountExecutors = new ArrayList<CountExecutor>();
         try {
             for (int i = 0; (i < queries.size()) && (count < maxFeatures); i++) {
@@ -397,7 +393,7 @@ public class GetFeature {
                         }
                     }
 
-                    List<FeatureTypeInfo> metas = new ArrayList<>();
+                    List<FeatureTypeInfo> metas = new ArrayList();
                     for (QName typeName : query.getTypeNames()) {
                         metas.add(featureTypeInfo(typeName, request));
                     }
@@ -495,8 +491,8 @@ public class GetFeature {
                         }
                     }
 
-                    List<List<PropertyName>> propNames = new ArrayList<>();
-                    List<List<PropertyName>> allPropNames = new ArrayList<>();
+                    List<List<PropertyName>> propNames = new ArrayList();
+                    List<List<PropertyName>> allPropNames = new ArrayList();
 
                     for (int j = 0; j < metas.size(); j++) {
                         List<String> propertyNames = reqPropertyNames.get(j);
@@ -517,12 +513,12 @@ public class GetFeature {
                                                     + " is "
                                                     + "not available "
                                                     + "for "
-                                                    + meta.prefixedName()
+                                                    + meta.getPrefixedName()
                                                     + ".  ";
 
                                     if (meta.getFeatureType() instanceof SimpleFeatureType) {
                                         List<AttributeTypeInfo> atts = meta.attributes();
-                                        List<String> attNames = new ArrayList<>(atts.size());
+                                        List attNames = new ArrayList(atts.size());
                                         for (AttributeTypeInfo att : atts) {
                                             attNames.add(att.getName());
                                         }
@@ -579,48 +575,6 @@ public class GetFeature {
                     if (joins != null) {
                         hints = new Hints(ResourcePool.JOINS, joins);
                     }
-
-                    // for remote reprojection in case of WFS-NG datastore ONLY
-                    if (meta.getStore()
-                                            .getConnectionParameters()
-                                            .get(WFSDataStoreFactory.USEDEFAULTSRS.key)
-                                    != null
-                            && meta.getMetadata().get(FeatureTypeInfo.OTHER_SRS) != null) {
-                        // if wfs-ng datastore is NOT set to use default srs
-                        // then find request SRS in OTHER_SRS list
-                        if (!Boolean.valueOf(
-                                meta.getStore()
-                                        .getConnectionParameters()
-                                        .get(WFSDataStoreFactory.USEDEFAULTSRS.key)
-                                        .toString())) {
-
-                            if (query.getSrsName() != null) {
-                                String otherSrsStr =
-                                        (String) meta.getMetadata().get(FeatureTypeInfo.OTHER_SRS);
-                                // create list of other srs
-                                List<String> otherSRSList = Arrays.asList(otherSrsStr.split(","));
-                                try {
-                                    CoordinateReferenceSystem requestedCRS =
-                                            CRS.decode(query.getSrsName().toString());
-                                    for (String otherSRS : otherSRSList) {
-                                        if (!CRS.isTransformationRequired(
-                                                CRS.decode(otherSRS), requestedCRS)) {
-                                            // no transformation required, mark to skip
-                                            // re-projection
-                                            if (hints == null) hints = new Hints();
-                                            hints.put(ResourcePool.MAP_CRS, requestedCRS);
-                                            break;
-                                        }
-                                    }
-                                } catch (NoSuchAuthorityCodeException ne) {
-                                    LOGGER.log(Level.SEVERE, ne.getMessage(), ne);
-                                } catch (FactoryException e) {
-                                    LOGGER.log(Level.SEVERE, e.getMessage(), e);
-                                }
-                            }
-                        }
-                    }
-
                     FeatureSource<? extends FeatureType, ? extends Feature> source =
                             primaryMeta.getFeatureSource(null, hints);
 
@@ -810,9 +764,6 @@ public class GetFeature {
                 // optimization: if count < max features then total count == count
                 // can't use this optimization for v2
                 totalCount = BigInteger.valueOf(count);
-            } else if (isPreComputed(totalCountExecutors)) {
-                long total = getTotalCount(totalCountExecutors);
-                totalCount = BigInteger.valueOf(total);
             } else {
                 // ok, in this case we're forced to run the queries to discover the actual total
                 // count
@@ -826,7 +777,18 @@ public class GetFeature {
 
                             @Override
                             public Object loadObject() throws Exception {
-                                long totalCount = getTotalCount(totalCountExecutors);
+                                long totalCount = 0;
+                                for (CountExecutor q : totalCountExecutors) {
+                                    int result = q.getCount();
+                                    // if the count is unknown for one, we don't know the total,
+                                    // period
+                                    if (result == -1) {
+                                        totalCount = -1;
+                                        break;
+                                    } else {
+                                        totalCount += result;
+                                    }
+                                }
                                 return BigInteger.valueOf(totalCount);
                             }
                         });
@@ -851,32 +813,6 @@ public class GetFeature {
                 results,
                 lockId,
                 getFeatureById);
-    }
-
-    /** Returns true if all count executors are given a static count value */
-    private boolean isPreComputed(List<CountExecutor> totalCountExecutors) {
-        for (CountExecutor q : totalCountExecutors) {
-            if (!q.isCountSet()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private long getTotalCount(List<CountExecutor> totalCountExecutors) throws IOException {
-        long totalCount = 0;
-        for (CountExecutor q : totalCountExecutors) {
-            int result = q.getCount();
-            // if the count is unknown for one, we don't know the total,
-            // period
-            if (result == -1) {
-                totalCount = -1;
-                break;
-            } else {
-                totalCount += result;
-            }
-        }
-        return totalCount;
     }
 
     private Filter toFeatureIdFilter(List<FeatureId> lockedFeatures) {
@@ -922,20 +858,28 @@ public class GetFeature {
     /**
      * Expands the stored queries, returns true if a single GetFeatureById stored query was found
      * (as a different GML encoding is required in that case)
+     *
+     * @param request
+     * @return
      */
     protected boolean processStoredQueries(GetFeatureRequest request) {
-        @SuppressWarnings("unchecked")
-        List<AbstractQueryExpressionType> queries = (List) request.getAdaptedQueries();
+        List queries = request.getAdaptedQueries();
         boolean foundGetFeatureById = expandStoredQueries(request, queries, storedQueryProvider);
 
         return queries.size() == 1 && foundGetFeatureById;
     }
 
-    /** Replaces stored queries with actual ad-hoc queries */
+    /**
+     * Replaces stored queries with actual ad-hoc queries
+     *
+     * @param request
+     * @param queries
+     * @param foundGetFeatureById
+     * @param storedQueryProvider
+     * @return
+     */
     static boolean expandStoredQueries(
-            RequestObject request,
-            List<AbstractQueryExpressionType> queries,
-            StoredQueryProvider storedQueryProvider) {
+            RequestObject request, List queries, StoredQueryProvider storedQueryProvider) {
         boolean foundGetFeatureById = false;
         for (int i = 0; i < queries.size(); i++) {
             Object obj = queries.get(i);
@@ -963,7 +907,7 @@ public class GetFeature {
                     throw exception;
                 }
 
-                List<QueryType> compiled = storedQuery.compile(sq);
+                List<net.opengis.wfs20.QueryType> compiled = storedQuery.compile(sq);
                 queries.remove(i);
                 queries.addAll(i, compiled);
                 i += compiled.size();
@@ -979,7 +923,7 @@ public class GetFeature {
             int maxFeatures,
             int count,
             BigInteger total,
-            List<FeatureCollection<? extends FeatureType, ? extends Feature>> results,
+            List results,
             String lockId,
             boolean getFeatureById) {
 
@@ -1006,7 +950,7 @@ public class GetFeature {
             // TODO: figure out what the spec says about this...
             Map<String, String> kvp = null;
             if (req.isGet()) {
-                kvp = mapValuesToStrings(req.getRawKvp());
+                kvp = new KvpMap(req.getRawKvp());
             } else {
                 // generate kvp map from request object
                 kvp = buildKvpFromRequest(request);
@@ -1015,20 +959,6 @@ public class GetFeature {
         }
 
         return result;
-    }
-
-    private KvpMap<String, String> mapValuesToStrings(Map<String, Object> rawKvp) {
-        return rawKvp.entrySet()
-                .stream()
-                .collect(
-                        Collectors.toMap(
-                                e -> e.getKey(),
-                                e -> (String) e.getValue(),
-                                (u, v) -> {
-                                    throw new IllegalStateException(
-                                            String.format("Duplicate key %s", u));
-                                },
-                                () -> new KvpMap<>()));
     }
 
     protected void buildPrevNextLinks(
@@ -1041,7 +971,7 @@ public class GetFeature {
         // WFS 2.0 specific, must have a next and should point to the first result
         if (request.isResultTypeHits()
                 && (request.getVersion() == null || request.getVersion().startsWith("2"))) {
-            kvp = new KvpMap<>(kvp);
+            kvp = new KvpMap(kvp);
             kvp.put("RESULTTYPE", "results");
             kvp.put("STARTINDEX", "0");
         }
@@ -1073,13 +1003,13 @@ public class GetFeature {
         }
     }
 
-    protected KvpMap<String, String> buildKvpFromRequest(GetFeatureRequest request) {
+    protected KvpMap buildKvpFromRequest(GetFeatureRequest request) {
 
         // FILTER_LANGUAGE
         // RESOURCEID
         // BBOX
         // STOREDQUERY_ID
-        KvpMap<String, String> kvp = new KvpMap<>();
+        KvpMap kvp = new KvpMap();
 
         // SERVICE
         // VERSION
@@ -1215,6 +1145,10 @@ public class GetFeature {
     /**
      * Allows subclasses to poke with the feature collection extraction. The default behavior
      * attempts to wrap the feature collectio into a {@link FeatureSizeFeatureCollection}.
+     *
+     * @param source
+     * @param gtQuery
+     * @throws IOException
      */
     protected FeatureCollection<? extends FeatureType, ? extends Feature> getFeatures(
             Object request,
@@ -1270,25 +1204,30 @@ public class GetFeature {
         CoordinateReferenceSystem crs = source.getSchema().getCoordinateReferenceSystem();
 
         // gather declared CRS
-        final FeatureTypeInfo featureTypeInfo =
-                catalog.getFeatureTypeByName(
-                        primaryTypeName.getPrefix(), primaryTypeName.getLocalPart());
         CoordinateReferenceSystem declaredCRS = WFSReprojectionUtil.getDeclaredCrs(crs, wfsVersion);
 
         // make sure every bbox and geometry that does not have an attached crs will use
         // the declared crs, and then reproject it to the native crs
         Filter transformedFilter = filter;
-
         if (declaredCRS != null) {
             transformedFilter =
                     WFSReprojectionUtil.normalizeFilterCRS(filter, source.getSchema(), declaredCRS);
         } else {
             // this may happen with complex features, let's try to use the feature type info CRS
-            transformedFilter = buildFilterCRSFromInfo(filter, primaryTypeName, source, wfsVersion);
+            FeatureTypeInfo featureTypeInfo =
+                    catalog.getFeatureTypeByName(
+                            primaryTypeName.getPrefix(), primaryTypeName.getLocalPart());
+            if (featureTypeInfo != null && featureTypeInfo.getCRS() != null) {
+                // the feature type info has a CRS defined, so let's use it
+                transformedFilter =
+                        WFSReprojectionUtil.normalizeFilterCRS(
+                                filter,
+                                source.getSchema(),
+                                WFSReprojectionUtil.getDeclaredCrs(
+                                        featureTypeInfo.getCRS(), wfsVersion),
+                                featureTypeInfo.getCRS());
+            }
         }
-        // evaluate reprojection on complex features case
-        declaredCRS =
-                replaceCRSIfComplexFeatures(source, wfsVersion, crs, featureTypeInfo, declaredCRS);
 
         // replace gml:boundedBy with an expression
         transformedFilter =
@@ -1442,32 +1381,10 @@ public class GetFeature {
         return dataQuery;
     }
 
-    private CoordinateReferenceSystem replaceCRSIfComplexFeatures(
-            FeatureSource<? extends FeatureType, ? extends Feature> source,
-            String wfsVersion,
-            CoordinateReferenceSystem crs,
-            final FeatureTypeInfo featureTypeInfo,
-            CoordinateReferenceSystem formerCrs) {
-        // if not complex features
-        if (source.getSchema() instanceof SimpleFeatureType) {
-            return formerCrs;
-        } else {
-            // they are complex features, proceed with projection logic
-            final ProjectionPolicy projectionPolicy = featureTypeInfo.getProjectionPolicy();
-            switch (projectionPolicy) {
-                case REPROJECT_TO_DECLARED:
-                case FORCE_DECLARED:
-                    return WFSReprojectionUtil.getDeclaredCrs(featureTypeInfo.getCRS(), wfsVersion);
-                default:
-                    return WFSReprojectionUtil.getDeclaredCrs(crs, wfsVersion);
-            }
-        }
-    }
-
     static Integer traverseXlinkDepth(String raw) {
         Integer traverseXlinkDepth = null;
         try {
-            traverseXlinkDepth = Integer.valueOf(raw);
+            traverseXlinkDepth = new Integer(raw);
         } catch (NumberFormatException nfe) {
             // try handling *
             if ("*".equals(raw)) {
@@ -1475,7 +1392,7 @@ public class GetFeature {
                 // might be reported in teh acapabilitis document, using
                 // INteger.MAX_VALUE will result in stack overflow... for now
                 // we just use 10
-                traverseXlinkDepth = Integer.valueOf(2);
+                traverseXlinkDepth = new Integer(2);
             } else {
                 // not wildcard case, throw original exception
                 throw nfe;
@@ -1505,11 +1422,10 @@ public class GetFeature {
         return meta;
     }
 
-    @SuppressWarnings("PMD.UnusedLocalVariable")
     List<List<String>> parsePropertyNames(Query query, List<FeatureTypeInfo> featureTypes) {
-        List<List<String>> propNames = new ArrayList<>();
+        List<List<String>> propNames = new ArrayList();
         for (FeatureTypeInfo featureType : featureTypes) {
-            propNames.add(new ArrayList<>());
+            propNames.add(new ArrayList());
         }
 
         if (featureTypes.size() == 1) {
@@ -1524,10 +1440,12 @@ public class GetFeature {
             // check for a full typename prefix
             for (int j = 0; j < featureTypes.size(); j++) {
                 FeatureTypeInfo featureType = featureTypes.get(j);
-                if (propName.startsWith(featureType.prefixedName() + "/")) {
+                if (propName.startsWith(featureType.getPrefixedName() + "/")) {
                     propNames
                             .get(j)
-                            .add(propName.substring((featureType.prefixedName() + "/").length()));
+                            .add(
+                                    propName.substring(
+                                            (featureType.getPrefixedName() + "/").length()));
                     continue O;
                 }
                 if (propName.startsWith(featureType.getName() + "/")) {
@@ -1637,7 +1555,68 @@ public class GetFeature {
 
             if (query.getSrsName() != null) {
                 final Query fquery = query;
-                fvisitor = new CiteBBOXValidator(fquery, request);
+                fvisitor =
+                        new AbstractFilterVisitor() {
+                            public Object visit(BBOX filter, Object data) {
+                                if (filter.getSRS() != null
+                                        && !fquery.getSrsName()
+                                                .toString()
+                                                .equals(filter.getSRS())) {
+
+                                    // back project bounding box into geographic coordinates
+                                    CoordinateReferenceSystem geo = DefaultGeographicCRS.WGS84;
+
+                                    GeneralEnvelope e =
+                                            new GeneralEnvelope(
+                                                    new double[] {
+                                                        filter.getMinX(), filter.getMinY()
+                                                    },
+                                                    new double[] {
+                                                        filter.getMaxX(), filter.getMaxY()
+                                                    });
+                                    CoordinateReferenceSystem crs = null;
+                                    try {
+                                        crs = CRS.decode(filter.getSRS());
+                                        e.setCoordinateReferenceSystem(crs);
+                                        e = CRS.transform(e, geo);
+                                    } catch (Exception ex) {
+                                        throw new WFSException(request, ex);
+                                    }
+
+                                    // ensure within bounds defined by srs specified on
+                                    // query
+                                    try {
+                                        crs = CRS.decode(fquery.getSrsName().toString());
+                                    } catch (Exception ex) {
+                                        throw new WFSException(request, ex);
+                                    }
+
+                                    GeographicBoundingBox valid =
+                                            (GeographicBoundingBox)
+                                                    crs.getDomainOfValidity()
+                                                            .getGeographicElements()
+                                                            .iterator()
+                                                            .next();
+
+                                    if (e.getMinimum(0) < valid.getWestBoundLongitude()
+                                            || e.getMinimum(0) > valid.getEastBoundLongitude()
+                                            || e.getMaximum(0) < valid.getWestBoundLongitude()
+                                            || e.getMaximum(0) > valid.getEastBoundLongitude()
+                                            || e.getMinimum(1) < valid.getSouthBoundLatitude()
+                                            || e.getMinimum(1) > valid.getNorthBoundLatitude()
+                                            || e.getMaximum(1) < valid.getSouthBoundLatitude()
+                                            || e.getMaximum(1) > valid.getNorthBoundLatitude()) {
+
+                                        throw new WFSException(
+                                                request,
+                                                "bounding box out of valid range of crs",
+                                                "InvalidParameterValue");
+                                    }
+                                }
+
+                                return data;
+                            }
+                        };
 
                 filter.accept(fvisitor, null);
             }
@@ -1744,82 +1723,5 @@ public class GetFeature {
         }
 
         return properties;
-    }
-
-    private Filter buildFilterCRSFromInfo(
-            Filter filter,
-            QName primaryTypeName,
-            FeatureSource<? extends FeatureType, ? extends Feature> source,
-            String wfsVersion) {
-        FeatureTypeInfo featureTypeInfo =
-                catalog.getFeatureTypeByName(
-                        primaryTypeName.getPrefix(), primaryTypeName.getLocalPart());
-        if (featureTypeInfo != null && featureTypeInfo.getCRS() != null) {
-            // the feature type info has a CRS defined, so let's use it
-            return WFSReprojectionUtil.normalizeFilterCRS(
-                    filter,
-                    source.getSchema(),
-                    WFSReprojectionUtil.getDeclaredCrs(featureTypeInfo.getCRS(), wfsVersion),
-                    featureTypeInfo.getCRS());
-        } else {
-            return filter;
-        }
-    }
-
-    private static class CiteBBOXValidator extends AbstractFilterVisitor {
-        private final Query fquery;
-        private final GetFeatureRequest request;
-
-        public CiteBBOXValidator(Query fquery, GetFeatureRequest request) {
-            this.fquery = fquery;
-            this.request = request;
-        }
-
-        public Object visit(BBOX filter, Object data) {
-            ReferencedEnvelope ex2Envelope =
-                    filter.getExpression2().evaluate(null, ReferencedEnvelope.class);
-            try {
-                CoordinateReferenceSystem queryCrs = CRS.decode(fquery.getSrsName().toString());
-                if (ex2Envelope != null
-                        && ex2Envelope.getCoordinateReferenceSystem() != null
-                        && !queryCrs.equals(ex2Envelope.getCoordinateReferenceSystem())) {
-                    // back project bounding box into geographic coordinates
-                    CoordinateReferenceSystem geo = DefaultGeographicCRS.WGS84;
-
-                    GeneralEnvelope e = new GeneralEnvelope(filter.getBounds());
-                    e = CRS.transform(e, geo);
-
-                    // ensure within bounds defined by srs specified on
-                    // query
-                    CoordinateReferenceSystem crs = queryCrs;
-
-                    GeographicBoundingBox valid =
-                            (GeographicBoundingBox)
-                                    crs.getDomainOfValidity()
-                                            .getGeographicElements()
-                                            .iterator()
-                                            .next();
-
-                    if (e.getMinimum(0) < valid.getWestBoundLongitude()
-                            || e.getMinimum(0) > valid.getEastBoundLongitude()
-                            || e.getMaximum(0) < valid.getWestBoundLongitude()
-                            || e.getMaximum(0) > valid.getEastBoundLongitude()
-                            || e.getMinimum(1) < valid.getSouthBoundLatitude()
-                            || e.getMinimum(1) > valid.getNorthBoundLatitude()
-                            || e.getMaximum(1) < valid.getSouthBoundLatitude()
-                            || e.getMaximum(1) > valid.getNorthBoundLatitude()) {
-
-                        throw new WFSException(
-                                request,
-                                "bounding box out of valid range of crs",
-                                "InvalidParameterValue");
-                    }
-                }
-            } catch (Exception e) {
-                throw new WFSException(request, e);
-            }
-
-            return data;
-        }
     }
 }

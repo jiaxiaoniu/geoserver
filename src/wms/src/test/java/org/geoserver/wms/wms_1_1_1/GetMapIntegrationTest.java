@@ -6,9 +6,9 @@
 package org.geoserver.wms.wms_1_1_1;
 
 import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -46,29 +46,17 @@ import org.geoserver.catalog.CoverageView;
 import org.geoserver.catalog.CoverageView.CompositionType;
 import org.geoserver.catalog.CoverageView.CoverageBand;
 import org.geoserver.catalog.CoverageView.InputCoverageBand;
-import org.geoserver.catalog.DataStoreInfo;
 import org.geoserver.catalog.FeatureTypeInfo;
 import org.geoserver.catalog.LayerGroupInfo;
 import org.geoserver.catalog.LayerInfo;
-import org.geoserver.catalog.MetadataMap;
 import org.geoserver.catalog.PublishedInfo;
-import org.geoserver.catalog.StyleInfo;
-import org.geoserver.catalog.TestHttpClientProvider;
-import org.geoserver.catalog.impl.DataStoreInfoImpl;
-import org.geoserver.catalog.impl.FeatureTypeInfoImpl;
-import org.geoserver.catalog.impl.LegendInfoImpl;
 import org.geoserver.config.GeoServer;
 import org.geoserver.config.GeoServerInfo;
-import org.geoserver.config.util.XStreamPersister;
-import org.geoserver.config.util.XStreamPersisterFactory;
 import org.geoserver.data.test.MockData;
 import org.geoserver.data.test.SystemTestData;
 import org.geoserver.data.test.SystemTestData.LayerProperty;
 import org.geoserver.data.test.TestData;
-import org.geoserver.feature.retype.RetypingDataStore;
 import org.geoserver.test.RemoteOWSTestSupport;
-import org.geoserver.test.http.MockHttpClient;
-import org.geoserver.test.http.MockHttpResponse;
 import org.geoserver.wms.GetMap;
 import org.geoserver.wms.GetMapOutputFormat;
 import org.geoserver.wms.GetMapTest;
@@ -77,14 +65,10 @@ import org.geoserver.wms.WMSInfo;
 import org.geoserver.wms.WMSTestSupport;
 import org.geoserver.wms.map.OpenLayersMapOutputFormat;
 import org.geoserver.wms.map.RenderedImageMapOutputFormat;
-import org.geotools.data.DataAccess;
-import org.geotools.data.wfs.WFSDataStore;
-import org.geotools.data.wfs.WFSDataStoreFactory;
 import org.geotools.gce.imagemosaic.ImageMosaicFormat;
 import org.geotools.image.ImageWorker;
 import org.geotools.image.test.ImageAssert;
 import org.junit.Test;
-import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -105,12 +89,6 @@ public class GetMapIntegrationTest extends WMSTestSupport {
 
     public static QName LARGE_POLYGON =
             new QName(MockData.CITE_URI, "slightlyLessGiantPolygon", MockData.CITE_PREFIX);
-
-    private static final QName MOSAIC_TAZDEM =
-            new QName(MockData.SF_URI, "mosaicTazDem", MockData.SF_PREFIX);
-
-    private static final QName MOSAIC_TAZDEM_WIDTH =
-            new QName(MockData.SF_URI, "mosaicTazDemWidth", MockData.SF_PREFIX);
 
     String bbox = "-130,24,-66,50";
 
@@ -207,7 +185,7 @@ public class GetMapIntegrationTest extends WMSTestSupport {
                 "jiffleBandSelect", "jiffleBandSelect.sld", GetMapIntegrationTest.class, catalog);
         testData.addVectorLayer(
                 new QName(MockData.SF_URI, "states", MockData.SF_PREFIX),
-                Collections.emptyMap(),
+                Collections.EMPTY_MAP,
                 "states.properties",
                 getClass(),
                 catalog);
@@ -225,12 +203,7 @@ public class GetMapIntegrationTest extends WMSTestSupport {
         testData.addStyle(
                 "demTranslucent", "demTranslucent.sld", GetMapIntegrationTest.class, catalog);
 
-        testData.addStyle("transparencyFill", "transparencyFillStyle.sld", getClass(), catalog);
-
-        testData.addStyle(
-                "transparencyFillWidth", "transparencyFillStyleWidth.sld", getClass(), catalog);
-
-        Map<LayerProperty, Object> properties = new HashMap<>();
+        Map properties = new HashMap();
         properties.put(LayerProperty.STYLE, "raster");
         testData.addRasterLayer(
                 MOSAIC_HOLES,
@@ -251,33 +224,17 @@ public class GetMapIntegrationTest extends WMSTestSupport {
 
         testData.addVectorLayer(
                 GIANT_POLYGON,
-                Collections.emptyMap(),
+                Collections.EMPTY_MAP,
                 "giantPolygon.properties",
                 SystemTestData.class,
                 getCatalog());
 
         testData.addVectorLayer(
                 LARGE_POLYGON,
-                Collections.emptyMap(),
+                Collections.EMPTY_MAP,
                 "slightlyLessGiantPolygon.properties",
                 GetMapTest.class,
                 getCatalog());
-
-        testData.addRasterLayer(
-                MOSAIC_TAZDEM,
-                "tazdemMosaic.zip",
-                null,
-                properties,
-                GetMapIntegrationTest.class,
-                catalog);
-
-        testData.addRasterLayer(
-                MOSAIC_TAZDEM_WIDTH,
-                "tazdemMosaicWidth.zip",
-                null,
-                properties,
-                GetMapIntegrationTest.class,
-                catalog);
 
         addCoverageViewLayer();
 
@@ -854,12 +811,6 @@ public class GetMapIntegrationTest extends WMSTestSupport {
     }
 
     @Test
-    public void testXmlPostWithWorkSpaceQualifier() throws Exception {
-        MockHttpServletResponse response = postAsServletResponse("sf/wms?", STATES_GETMAP);
-        checkImage(response);
-    }
-
-    @Test
     public void testRemoteOWSGet() throws Exception {
         if (!RemoteOWSTestSupport.isRemoteWFSStatesAvailable(LOGGER)) return;
 
@@ -1189,7 +1140,8 @@ public class GetMapIntegrationTest extends WMSTestSupport {
                                 + "&srs=EPSG:4326&format_options=layout:test-layout-sldtitle;dpi:"
                                 + dpi,
                         "image/png");
-        // RenderedImageBrowser.showChain(image, false, false, "Foobar", true);
+        // RenderedImageBrowser.showChain(image);
+
         // check the pixels that should be in the legend
         assertPixel(image, 15, 67, Color.RED);
         assertPixel(image, 15, 107, Color.GREEN);
@@ -1367,7 +1319,6 @@ public class GetMapIntegrationTest extends WMSTestSupport {
         }
     }
 
-    @Test
     public void testRssMime() throws Exception {
         MockHttpServletResponse response =
                 getAsServletResponse(
@@ -1522,42 +1473,9 @@ public class GetMapIntegrationTest extends WMSTestSupport {
     }
 
     @Test
-    public void testJpegPng8Transparent() throws Exception {
-        String request =
-                "wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&FORMAT=image%2Fvnd.jpeg-png8&TRANSPARENT=true&STYLES"
-                        + "&LAYERS=cite%3ABasicPolygons&SRS=EPSG%3A4326&WIDTH=256&HEIGHT=256&BBOX=-2.4%2C1.4%2C0.4%2C4.2";
-        // checks it's a PNG
-        MockHttpServletResponse resp = getAsServletResponse(request);
-        assertEquals("image/png", resp.getContentType());
-        assertEquals(
-                "inline; filename=cite-BasicPolygons.png",
-                resp.getHeader(HttpHeaders.CONTENT_DISPOSITION));
-        BufferedImage image = ImageIO.read(getBinaryInputStream(resp));
-        assertNotBlank("testJpegPngTransparent", image);
-        // check it's paletted
-        assertThat(image.getColorModel(), instanceOf(IndexColorModel.class));
-    }
-
-    @Test
     public void testJpegPngOpaque() throws Exception {
         String request =
                 "wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&FORMAT=image%2Fvnd.jpeg-png&TRANSPARENT=true&STYLES"
-                        + "&LAYERS=cite%3ABasicPolygons&SRS=EPSG%3A4326&WIDTH=256&HEIGHT=256&BBOX=-0.4%2C3.6%2C1%2C5";
-        // checks it's a JPEG, since it's opaque
-        MockHttpServletResponse resp = getAsServletResponse(request);
-        assertEquals("image/jpeg", resp.getContentType());
-        assertEquals(
-                "inline; filename=cite-BasicPolygons.jpg",
-                resp.getHeader(HttpHeaders.CONTENT_DISPOSITION));
-        InputStream is = getBinaryInputStream(resp);
-        BufferedImage image = ImageIO.read(is);
-        assertNotBlank("testJpegPngOpaque", image);
-    }
-
-    @Test
-    public void testJpegPng8Opaque() throws Exception {
-        String request =
-                "wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&FORMAT=image%2Fvnd.jpeg-png8&TRANSPARENT=true&STYLES"
                         + "&LAYERS=cite%3ABasicPolygons&SRS=EPSG%3A4326&WIDTH=256&HEIGHT=256&BBOX=-0.4%2C3.6%2C1%2C5";
         // checks it's a JPEG, since it's opaque
         BufferedImage image = getAsImage(request, "image/jpeg");
@@ -1762,529 +1680,5 @@ public class GetMapIntegrationTest extends WMSTestSupport {
                 new File("./src/test/resources/org/geoserver/wms/wms_1_1_1/jiffleBandSelected.png"),
                 jiffleBandSelected,
                 300);
-    }
-
-    @Test
-    public void testWFSNGReprojection() throws Exception {
-        String baseURL = TestHttpClientProvider.MOCKSERVER;
-        MockHttpClient client = new MockHttpClient();
-
-        URL descURL =
-                new URL(baseURL + "/wfs?REQUEST=DescribeFeatureType&VERSION=1.1.0&SERVICE=WFS");
-        client.expectGet(
-                descURL,
-                new MockHttpResponse(
-                        getClass().getResource("/geoserver/wfs-ng/desc_110.xml"), "text/xml"));
-
-        URL descFeatureURL =
-                new URL(
-                        baseURL
-                                + "/wfs?NAMESPACE=xmlns%28topp%3Dhttp%3A%2F%2Fwww.topp.com%29&TYPENAME=topp%3Aroads22&REQUEST=DescribeFeatureType&VERSION=1.1.0&SERVICE=WFS");
-
-        client.expectGet(
-                descFeatureURL,
-                new MockHttpResponse(
-                        getClass().getResource("/geoserver/wfs-ng/desc_feature.xml"), "text/xml"));
-
-        URL remoteRequestURL =
-                new URL(
-                        baseURL
-                                + "/wfs?PROPERTYNAME=the_geom&FILTER=%3Cogc%3AFilter+xmlns%3Axs%3D%22http%3A%2F%2Fwww.w3.org%2F2001%2FXMLSchema%22+xmlns%3Agml%3D%22http%3A%2F%2Fwww.opengis.net%2Fgml%22+xmlns%3Aogc%3D%22http%3A%2F%2Fwww.opengis.net%2Fogc%22%3E%3Cogc%3ABBOX%3E%3Cogc%3APropertyName%3Ethe_geom%3C%2Fogc%3APropertyName%3E%3Cgml%3AEnvelope+srsDimension%3D%222%22+srsName%3D%22http%3A%2F%2Fwww.opengis.net%2Fgml%2Fsrs%2Fepsg.xml%234326%22%3E%3Cgml%3AlowerCorner%3E-103.882897+44.370304%3C%2Fgml%3AlowerCorner%3E%3Cgml%3AupperCorner%3E-103.617584+44.50476%3C%2Fgml%3AupperCorner%3E%3C%2Fgml%3AEnvelope%3E%3C%2Fogc%3ABBOX%3E%3C%2Fogc%3AFilter%3E&TYPENAME=topp%3Aroads22&REQUEST=GetFeature&RESULTTYPE=RESULTS&OUTPUTFORMAT=text%2Fxml%3B+subtype%3Dgml%2F3.1.1&SRSNAME=EPSG%3A4326&VERSION=1.1.0&SERVICE=WFS");
-
-        client.expectGet(
-                remoteRequestURL,
-                new MockHttpResponse(
-                        getClass().getResource("/geoserver/wfs-ng/wfs_response_4326.xml"),
-                        "text/xml"));
-
-        URL remoteRequestURL3857 =
-                new URL(
-                        baseURL
-                                + "/wfs?PROPERTYNAME=the_geom&FILTER=%3Cogc%3AFilter+xmlns%3Axs%3D%22http%3A%2F%2Fwww.w3.org%2F2001%2FXMLSchema%22+xmlns%3Agml%3D%22http%3A%2F%2Fwww.opengis.net%2Fgml%22+xmlns%3Aogc%3D%22http%3A%2F%2Fwww.opengis.net%2Fogc%22%3E%3Cogc%3ABBOX%3E%3Cogc%3APropertyName%3Ethe_geom%3C%2Fogc%3APropertyName%3E%3Cgml%3AEnvelope+srsDimension%3D%222%22+srsName%3D%22http%3A%2F%2Fwww.opengis.net%2Fgml%2Fsrs%2Fepsg.xml%233857%22%3E%3Cgml%3AlowerCorner%3E-1.1546746187616E7+5534640.824992%3C%2Fgml%3AlowerCorner%3E%3Cgml%3AupperCorner%3E-1.1542775460466E7+5538611.552142%3C%2Fgml%3AupperCorner%3E%3C%2Fgml%3AEnvelope%3E%3C%2Fogc%3ABBOX%3E%3C%2Fogc%3AFilter%3E&TYPENAME=topp%3Aroads22&REQUEST=GetFeature&RESULTTYPE=RESULTS&OUTPUTFORMAT=text%2Fxml%3B+subtype%3Dgml%2F3.1.1&SRSNAME=EPSG%3A3857&VERSION=1.1.0&SERVICE=WFS");
-
-        client.expectGet(
-                remoteRequestURL3857,
-                new MockHttpResponse(
-                        getClass().getResource("/geoserver/wfs-ng/wfs_response_3857.xml"),
-                        "text/xml"));
-
-        TestHttpClientProvider.bind(client, descURL);
-        TestHttpClientProvider.bind(client, descFeatureURL);
-        TestHttpClientProvider.bind(client, remoteRequestURL);
-        TestHttpClientProvider.bind(client, remoteRequestURL3857);
-
-        // MOCKING Catalog
-        URL url = getClass().getResource("/geoserver/wfs-ng/wfs_cap_110.xml");
-
-        CatalogBuilder cb = new CatalogBuilder(getCatalog());
-        DataStoreInfo storeInfo = cb.buildDataStore("MockWFSDataStore");
-        ((DataStoreInfoImpl) storeInfo).setId("1");
-        storeInfo.setType("Web Feature Server (NG)");
-        storeInfo.getConnectionParameters().put(WFSDataStoreFactory.URL.key, url);
-        storeInfo.getConnectionParameters().put("usedefaultsrs", Boolean.FALSE);
-        storeInfo.getConnectionParameters().put(WFSDataStoreFactory.PROTOCOL.key, Boolean.FALSE);
-        storeInfo.getConnectionParameters().put("TESTING", Boolean.TRUE);
-        getCatalog().add(storeInfo);
-
-        // MOCKING Feature Type with native CRS EPSG:26713
-        XStreamPersister xp = new XStreamPersisterFactory().createXMLPersister();
-        FeatureTypeInfo ftInfo =
-                xp.load(
-                        getClass().getResourceAsStream("/geoserver/wfs-ng/featuretype.xml"),
-                        FeatureTypeInfoImpl.class);
-        ftInfo.setStore(storeInfo);
-        ((FeatureTypeInfoImpl) ftInfo).setMetadata(new MetadataMap());
-        ftInfo.setSRS("EPSG:26713");
-        ftInfo.getMetadata().put(FeatureTypeInfo.OTHER_SRS, "EPSG:4326,urn:ogc:def:crs:EPSG::3857");
-        getCatalog().add(ftInfo);
-
-        // setting mock feature type as resource of Layer from Test Data
-        LayerInfo layerInfo = getCatalog().getLayerByName(MockData.ROAD_SEGMENTS.getLocalPart());
-        layerInfo.setResource(ftInfo);
-        layerInfo.setDefaultStyle(getCatalog().getStyleByName("line"));
-        // Injecting Mock Http client in WFS Data Store to read mock respones from XML
-        DataAccess dac = ftInfo.getStore().getDataStore(null);
-        RetypingDataStore retypingDS = (RetypingDataStore) dac;
-        WFSDataStore wfsDS = (WFSDataStore) retypingDS.getWrapped();
-        wfsDS.getWfsClient().setHttpClient(client);
-
-        getCatalog().save(layerInfo);
-
-        // test starts now
-        // a WMS request with EPSG:4326 should result in a remote WFS call with EPSG:4326 filter and
-        // response
-        // the expected URL can seen in remoteRequestURL
-        String wmsUrl =
-                "wms?LAYERS=topp_roads22&styles=line"
-                        + "&FORMAT=image%2Fpng&SERVICE=WMS&VERSION=1.1.1"
-                        + "&REQUEST=GetMap&SRS=EPSG%3A4326"
-                        + "&BBOX=-103.87779468316292,44.37288961726252,-103.62268570651278,44.50217396380937"
-                        + "&WIDTH=100&HEIGHT=100";
-
-        BufferedImage wfsNGImage = getAsImage(wmsUrl, "image/png");
-        ImageAssert.assertEquals(
-                new File("./src/test/resources/geoserver/wfs-ng/cascaded_wfs_layer_response.png"),
-                wfsNGImage,
-                300);
-
-        // make a request in EPSG:3857, which should match the other SRS urn:ogc:def:crs:EPSG::3857
-        // assert that that remote request was made in urn:ogc:def:crs:EPSG::3857 format
-        // assert response
-        String wmsUrlURNSrs =
-                "wms?LAYERS=topp_roads22&styles=line"
-                        + "&FORMAT=image%2Fpng&SERVICE=WMS&VERSION=1.1.1"
-                        + "&REQUEST=GetMap&SRS=EPSG%3A3857"
-                        + "&BBOX=-11546669.827478563,5534717.185129326,-11542851.820603596,5538535.192004295"
-                        + "&WIDTH=100&HEIGHT=100";
-
-        BufferedImage wfsNGImageURNSrs = getAsImage(wmsUrlURNSrs, "image/png");
-        ImageAssert.assertEquals(
-                new File(
-                        "./src/test/resources/geoserver/wfs-ng/cascaded_wfs_layer_response_3857.png"),
-                wfsNGImageURNSrs,
-                300);
-    }
-
-    @Test
-    public void testVendorOptionClipVector() throws Exception {
-        URL exptectedResponse = this.getClass().getResource("../wms_clip_vector.png");
-        BufferedImage expectedImage = ImageIO.read(exptectedResponse);
-
-        String polygonWkt =
-                "POLYGON((-103.81153231351766%2038.73789567417218,-105.74512606351766%2031.78525172547746,-95.28614168851766%2028.053665204466157,-91.33106356351766%2031.260810654461146,-96.42871981351766%2038.66930662128952,-103.81153231351766%2038.73789567417218))";
-
-        BufferedImage response =
-                getAsImage(
-                        "wms?bbox="
-                                + bbox
-                                + "&styles=polygon&layers="
-                                + layers
-                                + "&Format=image/png"
-                                + "&request=GetMap"
-                                + "&width=550"
-                                + "&height=250"
-                                + "&srs=EPSG:4326"
-                                + "&version=1.1.1"
-                                + "&clip="
-                                + polygonWkt,
-                        "image/png");
-
-        ImageAssert.assertEquals(expectedImage, response, 100);
-
-        String polygonWkt900913 =
-                "srid=900913;POLYGON ((-11556246.91561025 4684196.6150700655, -11771493.587261306 3735154.4718813156, -10607204.772421502 3255741.4304766906, -10166927.489498887 3666666.8945377995, -10734395.987488035 4674412.675449564, -11556246.91561025 4684196.6150700655))";
-        response =
-                getAsImage(
-                        "wms?bbox="
-                                + bbox
-                                + "&styles=polygon&layers="
-                                + layers
-                                + "&Format=image/png"
-                                + "&request=GetMap"
-                                + "&width=550"
-                                + "&height=250"
-                                + "&srs=EPSG:4326"
-                                + "&version=1.1.1"
-                                + "&clip="
-                                + polygonWkt900913,
-                        "image/png");
-        ImageAssert.assertEquals(expectedImage, response, 100);
-    }
-
-    @Test
-    public void testVendorOptionClipRaster() throws Exception {
-
-        URL exptectedResponse = this.getClass().getResource("../wms_clip_raster.png");
-        BufferedImage expectedImage = ImageIO.read(exptectedResponse);
-
-        // EU south of Schengen
-        String rasterMask =
-                "POLYGON((-0.4455465239619838 49.03915485780325,27.679453476038034 48.692256255310134,34.53492222603802 32.400173313532584,5.355234726038036 37.161881019039605,-0.4455465239619838 49.03915485780325))";
-        String worldBbox = "-53.384768,4.769752,80.121092,57.719733";
-
-        BufferedImage response =
-                getAsImage(
-                        "wms?bbox="
-                                + worldBbox
-                                + "&styles=&layers="
-                                + "wcs:World"
-                                + "&Format=image/png"
-                                + "&request=GetMap"
-                                + "&width=550"
-                                + "&height=250"
-                                + "&srs=EPSG:4326"
-                                + "&version=1.1.1"
-                                + "&clip="
-                                + rasterMask,
-                        "image/png");
-        ImageAssert.assertEquals(expectedImage, response, 100);
-
-        String rasterMask900913 =
-                "srid=900913;POLYGON ((-49598.01217216109 6281507.767506711, 3081262.66638866 6222804.1297836965, 3844409.956787858 3815954.983140064, 596142.0027810101 4461694.998093233, -49598.01217216109 6281507.767506711))";
-
-        response =
-                getAsImage(
-                        "wms?bbox="
-                                + worldBbox
-                                + "&styles=&layers="
-                                + "wcs:World"
-                                + "&Format=image/png"
-                                + "&request=GetMap"
-                                + "&width=550"
-                                + "&height=250"
-                                + "&srs=EPSG:4326"
-                                + "&version=1.1.1"
-                                + "&clip="
-                                + rasterMask900913,
-                        "image/png");
-
-        ImageAssert.assertEquals(expectedImage, response, 100);
-    }
-
-    @Test
-    public void testVendorOptionClipMosaic() throws Exception {
-        String clipPolygon = "POLYGON ((8 38, 10 38, 10 40, 8 40, 8 38))";
-        String url =
-                "wms?LAYERS=mosaic&"
-                        + "&FORMAT=image%2Fpng&SERVICE=WMS&VERSION=1.1.1"
-                        + "&REQUEST=GetMap&SRS=EPSG%3A4326"
-                        + "&BBOX=7,37,11,41&WIDTH=200&HEIGHT=200&bgcolor=0xFF0000"
-                        + "&CLIP="
-                        + clipPolygon;
-        BufferedImage response = getAsImage(url, "image/png");
-
-        File expected = new File("./src/test/resources/org/geoserver/wms/wms_clip_mosaic.png");
-        ImageAssert.assertEquals(expected, response, 100);
-    }
-
-    @Test
-    public void testLayoutLegendStyleOnlineResource() throws Exception {
-        Catalog catalog = getCatalog();
-        File layouts = getDataDirectory().findOrCreateDir("layouts");
-        URL layout = GetMapIntegrationTest.class.getResource("../test-layout-legend-image.xml");
-        FileUtils.copyURLToFile(layout, new File(layouts, "test-layout-legend-image.xml"));
-        File styles = getDataDirectory().findOrCreateDir("styles");
-        URL grassPng = GetMapIntegrationTest.class.getResource("../red_fill.png");
-        FileUtils.copyURLToFile(grassPng, new File(styles, "org/geoserver/wms/red_fill.png"));
-        FeatureTypeInfo giantPolygon = catalog.getFeatureTypeByName("giantPolygon");
-
-        StyleInfo sInfo = catalog.getLayerByName(giantPolygon.getName()).getDefaultStyle();
-        LegendInfoImpl legend = new LegendInfoImpl();
-        legend.setOnlineResource("org/geoserver/wms/red_fill.png");
-        legend.setFormat("image/png;charset=utf-8");
-        legend.setHeight(32);
-        legend.setWidth(32);
-        sInfo.setLegend(legend);
-        catalog.save(sInfo);
-        BufferedImage image =
-                getAsImage(
-                        "wms?bbox="
-                                + bbox
-                                + "&layers=cite:giantPolygon"
-                                + "&Format=image/png"
-                                + "&request=GetMap"
-                                + "&width=550"
-                                + "&height=150"
-                                + "&legend_options=fontName:Bitstream Vera Sans"
-                                + "&srs=EPSG:4326&format_options=layout:test-layout-legend-image",
-                        "image/png");
-
-        URL expectedResponse = getClass().getResource("giant_poly_legend_static_res.png");
-        BufferedImage expectedImage = ImageIO.read(expectedResponse);
-        ImageAssert.assertEquals(image, expectedImage, 2000);
-        sInfo.setLegend(null);
-        catalog.save(sInfo);
-    }
-
-    @Test
-    public void testLayoutLegendStyleTextFitBox() throws Exception {
-        Catalog catalog = getCatalog();
-        File layouts = getDataDirectory().findOrCreateDir("layouts");
-        URL layout = GetMapIntegrationTest.class.getResource("../test-layout-legend-image.xml");
-        FileUtils.copyURLToFile(layout, new File(layouts, "test-layout-legend-image.xml"));
-        FeatureTypeInfo giantPolygon = catalog.getFeatureTypeByName("giantPolygon");
-
-        StyleInfo sInfo = catalog.getLayerByName(giantPolygon.getName()).getDefaultStyle();
-        LegendInfoImpl legend = new LegendInfoImpl();
-        legend.setFormat("image/png;charset=utf-8");
-        legend.setHeight(32);
-        legend.setWidth(32);
-        sInfo.setLegend(legend);
-        catalog.save(sInfo);
-        BufferedImage image =
-                getAsImage(
-                        "wms?bbox="
-                                + bbox
-                                + "&layers=cite:giantPolygon"
-                                + "&Format=image/png"
-                                + "&request=GetMap"
-                                + "&width=550"
-                                + "&height=150"
-                                + "&legend_options=fontName:Bitstream Vera Sans"
-                                + "&srs=EPSG:4326&format_options=layout:test-layout-legend-image",
-                        "image/png");
-
-        URL expectedResponse = getClass().getResource("giant_poly_legend.png");
-        BufferedImage expectedImage = ImageIO.read(expectedResponse);
-        ImageAssert.assertEquals(image, expectedImage, 1500);
-        sInfo.setLegend(null);
-        catalog.save(sInfo);
-    }
-
-    @Test
-    public void testLayoutLegendWithSpecifiedTargetSize() throws Exception {
-        // checking a legend decoration with a custom size bigger than the
-        // map size; expecting that the specified legend size is picked up,
-        // while resizing it accordingly to map dimension
-        File layouts = getDataDirectory().findOrCreateDir("layouts");
-        URL layout = GetMapIntegrationTest.class.getResource("../test-layout-with-size.xml");
-        FileUtils.copyURLToFile(layout, new File(layouts, "test-layout-with-size.xml"));
-        BufferedImage image =
-                getAsImage(
-                        "wms?bbox="
-                                + bbox
-                                + "&layers=cite:giantPolygon"
-                                + "&Format=image/png"
-                                + "&request=GetMap"
-                                + "&width=550"
-                                + "&height=150"
-                                + "&legend_options=fontName:Bitstream Vera Sans"
-                                + "&srs=EPSG:4326&format_options=layout:test-layout-with-size",
-                        "image/png");
-
-        URL expectedResponse = getClass().getResource("giant_poly_big_legend.png");
-        BufferedImage expectedImage = ImageIO.read(expectedResponse);
-        ImageAssert.assertEquals(image, expectedImage, 1500);
-    }
-
-    @Test
-    public void testLegendDecoratorWithRaster() throws Exception {
-
-        File layouts = getDataDirectory().findOrCreateDir("layouts");
-        URL layout = GetMapIntegrationTest.class.getResource("../test-layout-legend-image.xml");
-        FileUtils.copyURLToFile(layout, new File(layouts, "test-layout-legend-image.xml"));
-        BufferedImage image =
-                getAsImage(
-                        "wms/reflect?layers="
-                                + getLayerId(MockData.TASMANIA_DEM)
-                                + "&format_options=layout:test-layout-legend-image&styles=demTranslucent&SRS=EPSG:32753&format=image/png&bgcolor=#404040",
-                        "image/png");
-
-        URL expectedResponse = getClass().getResource("dem_with_legend.png");
-        BufferedImage expectedImage = ImageIO.read(expectedResponse);
-        ImageAssert.assertEquals(image, expectedImage, 3400);
-    }
-
-    @Test
-    public void testLayoutLegendStyleWithLargeOnlineResource() throws Exception {
-        Catalog catalog = getCatalog();
-        File layouts = getDataDirectory().findOrCreateDir("layouts");
-        URL layout = GetMapIntegrationTest.class.getResource("../test-layout-legend-image.xml");
-        FileUtils.copyURLToFile(layout, new File(layouts, "test-layout-legend-image.xml"));
-        File styles = getDataDirectory().findOrCreateDir("styles");
-        URL grassPng = GetMapIntegrationTest.class.getResource("../large_legend_res.png");
-        FileUtils.copyURLToFile(
-                grassPng, new File(styles, "org/geoserver/wms/large_legend_res.png"));
-        FeatureTypeInfo giantPolygon = catalog.getFeatureTypeByName("giantPolygon");
-
-        StyleInfo sInfo = catalog.getLayerByName(giantPolygon.getName()).getDefaultStyle();
-        LegendInfoImpl legend = new LegendInfoImpl();
-        legend.setOnlineResource("org/geoserver/wms/large_legend_res.png");
-        legend.setFormat("image/png;charset=utf-8");
-        legend.setHeight(80);
-        legend.setWidth(640);
-        sInfo.setLegend(legend);
-        catalog.save(sInfo);
-        BufferedImage image =
-                getAsImage(
-                        "wms?bbox="
-                                + bbox
-                                + "&layers=cite:giantPolygon"
-                                + "&Format=image/png"
-                                + "&request=GetMap"
-                                + "&width=550"
-                                + "&height=150"
-                                + "&legend_options=fontName:Bitstream Vera Sans"
-                                + "&srs=EPSG:4326&format_options=layout:test-layout-legend-image",
-                        "image/png");
-        URL expectedResponse = getClass().getResource("giant_poly_big_res.png");
-        BufferedImage expectedImage = ImageIO.read(expectedResponse);
-        ImageAssert.assertEquals(image, expectedImage, 2300);
-        sInfo.setLegend(null);
-        catalog.save(sInfo);
-    }
-
-    @Test
-    public void testLayoutLegendStyleWithOnlineResourceAndCustomWidth() throws Exception {
-        Catalog catalog = getCatalog();
-        File layouts = getDataDirectory().findOrCreateDir("layouts");
-        URL layout =
-                GetMapIntegrationTest.class.getResource("../test-layout-legend-image-size.xml");
-        FileUtils.copyURLToFile(layout, new File(layouts, "test-layout-legend-image-size.xml"));
-        File styles = getDataDirectory().findOrCreateDir("styles");
-        URL grassPng = GetMapIntegrationTest.class.getResource("../large_legend_res.png");
-        FileUtils.copyURLToFile(
-                grassPng, new File(styles, "org/geoserver/wms/large_legend_res.png"));
-        FeatureTypeInfo giantPolygon = catalog.getFeatureTypeByName("giantPolygon");
-
-        StyleInfo sInfo = catalog.getLayerByName(giantPolygon.getName()).getDefaultStyle();
-        LegendInfoImpl legend = new LegendInfoImpl();
-        legend.setOnlineResource("org/geoserver/wms/large_legend_res.png");
-        legend.setFormat("image/png;charset=utf-8");
-        legend.setHeight(80);
-        legend.setWidth(640);
-        sInfo.setLegend(legend);
-        catalog.save(sInfo);
-        BufferedImage image =
-                getAsImage(
-                        "wms?bbox="
-                                + bbox
-                                + "&layers=cite:giantPolygon"
-                                + "&Format=image/png"
-                                + "&request=GetMap"
-                                + "&width=550"
-                                + "&height=150"
-                                + "&legend_options=fontName:Bitstream Vera Sans"
-                                + "&srs=EPSG:4326&format_options=layout:test-layout-legend-image-size",
-                        "image/png");
-        URL expectedResponse = getClass().getResource("giant_poly_big_res_size.png");
-        BufferedImage expectedImage = ImageIO.read(expectedResponse);
-        ImageAssert.assertEquals(image, expectedImage, 1500);
-        sInfo.setLegend(null);
-        catalog.save(sInfo);
-    }
-
-    @Test
-    public void testTransparencyFillFloatingMosaic() throws Exception {
-        Catalog catalog = getCatalog();
-
-        String bbox = "1.6141326165E7,-5311583.7534,1.62161191178E7,-5012341.6638";
-        BufferedImage image =
-                getAsImage(
-                        "wms?bbox="
-                                + bbox
-                                + "&layers=sf:mosaicTazDem"
-                                + "&Format=image/png"
-                                + "&request=GetMap"
-                                + "&width=330"
-                                + "&height=768"
-                                + "&srs=EPSG:3857",
-                        "image/png");
-
-        // check we have a transparent stripe between tiles in the result
-        // without using TransparencyFill process in the style
-        for (int i = 178; i < 326; i++) {
-            assertPixel(image, i, 638, Color.WHITE);
-        }
-        LayerInfo mosaicDem = catalog.getLayerByName(MOSAIC_TAZDEM.getLocalPart());
-        // add the style with the transparencyFill transformation to the layer
-        mosaicDem.setDefaultStyle(catalog.getStyleByName("transparencyFill"));
-        catalog.save(mosaicDem);
-        BufferedImage imageFill =
-                getAsImage(
-                        "wms?bbox="
-                                + bbox
-                                + "&layers=sf:mosaicTazDem"
-                                + "&Format=image/png"
-                                + "&request=GetMap"
-                                + "&width=330"
-                                + "&height=768"
-                                + "&srs=EPSG:3857",
-                        "image/png");
-
-        // check we don't have a transparent stripe between tiles in the result
-        // when using TransparencyFill process in the style
-        for (int i = 178; i < 326; i++) {
-            assertPixel(imageFill, i, 638, Color.RED);
-        }
-    }
-
-    @Test
-    public void testTransparencyFillMosaicWithWidth() throws Exception {
-        Catalog catalog = getCatalog();
-        String bbox = "144.9999999997784,-43.00035408499792,145.67539538802535,-40.999999999677854";
-        BufferedImage image =
-                getAsImage(
-                        "wms?bbox="
-                                + bbox
-                                + "&layers=sf:mosaicTazDemWidth"
-                                + "&Format=image/png"
-                                + "&request=GetMap"
-                                + "&width=330"
-                                + "&height=768"
-                                + "&srs=EPSG:4210",
-                        "image/png");
-
-        // check we have a multiline transparent stripe between tiles in the result
-        // without using TransparencyFill process in the style
-        for (int i = 178; i < 326; i++) {
-            assertPixel(image, i, 637, Color.WHITE);
-            assertPixel(image, i, 638, Color.WHITE);
-            assertPixel(image, i, 639, Color.WHITE);
-        }
-        LayerInfo mosaicDem = catalog.getLayerByName(MOSAIC_TAZDEM_WIDTH.getLocalPart());
-        // add the style with the transparencyFill transformation to the layer
-        mosaicDem.setDefaultStyle(catalog.getStyleByName("transparencyFillWidth"));
-        catalog.save(mosaicDem);
-        BufferedImage imageFill =
-                getAsImage(
-                        "wms?bbox="
-                                + bbox
-                                + "&layers=sf:mosaicTazDemWidth"
-                                + "&Format=image/png"
-                                + "&request=GetMap"
-                                + "&width=330"
-                                + "&height=768"
-                                + "&srs=EPSG:4210",
-                        "image/png");
-
-        // check we don't have a multiline transparent stripe between tiles in the result
-        // when using TransparencyFill process in the style
-
-        for (int i = 178; i < 326; i++) {
-            assertPixel(imageFill, i, 637, Color.RED);
-            assertPixel(imageFill, i, 638, Color.RED);
-            assertPixel(imageFill, i, 639, Color.RED);
-        }
     }
 }

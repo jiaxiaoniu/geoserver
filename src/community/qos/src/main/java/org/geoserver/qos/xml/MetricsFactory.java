@@ -12,7 +12,7 @@ import org.apache.commons.lang.StringUtils;
 
 public class MetricsFactory {
 
-    protected static volatile MetricsFactory INSTANCE;
+    protected static MetricsFactory INSTANCE;
 
     public static MetricsFactory getInstance() {
         if (INSTANCE == null) {

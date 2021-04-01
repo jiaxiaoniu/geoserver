@@ -24,6 +24,7 @@ import org.geoserver.ows.util.ResponseUtils;
 import org.geoserver.platform.GeoServerExtensions;
 import org.geoserver.wms.map.GetMapKvpRequestReader;
 import org.geotools.map.Layer;
+import org.geotools.map.MapLayer;
 import org.geotools.styling.Style;
 import org.locationtech.jts.geom.Envelope;
 import org.springframework.util.StringUtils;
@@ -43,7 +44,7 @@ public class WMSRequests {
      *
      * <p>The tile cache location is determined from {@link GeoServer#getTileCache()}. If the above
      * method returns null this method falls back to the behaviour of {@link
-     * #getGetMapUrl(WMSMapContent, Layer, Envelope, String[])}.
+     * #getGetMapUrl(WMSMapContent, MapLayer, Envelope, String[])}.
      *
      * <p>If the <tt>layer</tt> argument is <code>null</code>, the request is made including all
      * layers in the <tt>mapContexT</tt>.
@@ -56,6 +57,7 @@ public class WMSRequests {
      * @param layerIndex The index of the layer in the request
      * @param bbox The bounding box of the request, may be <code>null</code>.
      * @param kvp Additional or overidding kvp parameters, may be <code>null</code>
+     * @param geoserver
      * @return The full url for a getMap request.
      */
     public static String getTiledGetMapUrl(
@@ -185,7 +187,7 @@ public class WMSRequests {
      * Encodes the url of a GetLegendGraphic request.
      *
      * @param req The wms request.
-     * @param layers The layers, may not be <code>null</code>.
+     * @param published The Map layer, may not be <code>null</code>.
      * @param kvp Additional or overidding kvp parameters, may be <code>null</code>
      * @return The full url for a getMap request.
      */
@@ -282,7 +284,7 @@ public class WMSRequests {
             // no layer specified, use layers+styles specified by request
             for (int i = 0; i < req.getLayers().size(); i++) {
                 MapLayerInfo mapLayer = req.getLayers().get(i);
-                Style s = req.getStyles().get(0);
+                Style s = (Style) req.getStyles().get(0);
 
                 layers.append(mapLayer.getName()).append(",");
                 styles.append(s.getName()).append(",");
@@ -316,13 +318,14 @@ public class WMSRequests {
             if (req.getRawKvp().get("filter") != null) {
                 // split out the filter we need
                 List filters =
-                        KvpUtils.readFlat(req.getRawKvp().get("filter"), KvpUtils.OUTER_DELIMETER);
+                        KvpUtils.readFlat(
+                                (String) req.getRawKvp().get("filter"), KvpUtils.OUTER_DELIMETER);
                 params.put("filter", (String) filters.get(index));
             } else if (req.getRawKvp().get("cql_filter") != null) {
                 // split out the filter we need
                 List filters =
                         KvpUtils.readFlat(
-                                req.getRawKvp().get("cql_filter"), KvpUtils.CQL_DELIMITER);
+                                (String) req.getRawKvp().get("cql_filter"), KvpUtils.CQL_DELIMITER);
                 params.put("cql_filter", (String) filters.get(index));
             } else if (req.getRawKvp().get("featureid") != null) {
                 // semantics of feature id slightly different, replicate entire value
@@ -519,6 +522,8 @@ public class WMSRequests {
      * Copy the Entry matching the key from the kvp map and put it into the formatOptions map. If a
      * parameter is already present in formatOption map its value will be preserved.
      *
+     * @param kvp
+     * @param formatOptions
      * @param key the key to parse
      * @throws Exception - In the event of an unsuccesful parse.
      */
@@ -613,6 +618,7 @@ public class WMSRequests {
      * Encodes a list of format option maps to be used as the value in a kvp.
      *
      * @param formatOptions The list of formation option maps.
+     * @param sb StringBuffer to append to.
      * @return A string of the form
      *     'key1.1:value1.1,value1.2;key1.2:value1.1;...[,key2.1:value2.1,value2.2;key2.2:value2.1]',
      *     or the empty string if the formatOptions list is empty.
@@ -658,7 +664,7 @@ public class WMSRequests {
         }
 
         @Override
-        protected List<Object> parseLayers(
+        protected List<?> parseLayers(
                 List<String> requestedLayerNames, URL remoteOwsUrl, String remoteOwsType) {
             try {
                 return super.parseLayers(requestedLayerNames, remoteOwsUrl, remoteOwsType);

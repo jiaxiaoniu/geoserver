@@ -27,8 +27,8 @@ import org.geoserver.platform.GeoServerExtensions;
 import org.geoserver.platform.GeoServerResourceLoader;
 import org.geoserver.platform.resource.Resource;
 import org.geoserver.security.GeoServerSecurityManager;
+import org.geotools.factory.Hints;
 import org.geotools.filter.text.ecql.ECQL;
-import org.geotools.util.factory.Hints;
 import org.geotools.util.logging.Logging;
 import org.opengis.filter.Filter;
 import org.springframework.batch.core.BatchStatus;
@@ -87,8 +87,6 @@ public class Backup extends JobExecutionListenerSupport
     public static final String PARAM_OUTPUT_FILE_PATH = "output.file.path";
 
     public static final String PARAM_INPUT_FILE_PATH = "input.file.path";
-
-    public static final String PARAM_EXCLUDE_FILE_PATH = "exclude.file.path";
 
     public static final String PARAM_CLEANUP_TEMP = "BK_CLEANUP_TEMP";
 
@@ -306,7 +304,13 @@ public class Backup extends JobExecutionListenerSupport
         }
     }
 
-    /** Authenticate a user */
+    /**
+     * Authenticate a user
+     *
+     * @param username
+     * @param password
+     * @return
+     */
     public Authentication authenticate() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null && getAuth() != null) {
@@ -351,7 +355,10 @@ public class Backup extends JobExecutionListenerSupport
         return runBackupAsync(archiveFile, overwrite, wsFilter, siFilter, liFilter, builder);
     }
 
-    /** */
+    /**
+     * @return
+     * @throws IOException
+     */
     private BackupExecutionAdapter runBackupAsync(
             final Resource archiveFile,
             final boolean overwrite,
@@ -476,7 +483,11 @@ public class Backup extends JobExecutionListenerSupport
         return runRestoreAsync(archiveFile, wsFilter, siFilter, liFilter, paramsBuilder);
     }
 
-    /** */
+    /**
+     * @return
+     * @return
+     * @throws IOException
+     */
     public RestoreExecutionAdapter runRestoreAsync(
             final Resource archiveFile,
             final Filter wsFilter,
@@ -592,7 +603,14 @@ public class Backup extends JobExecutionListenerSupport
         }
     }
 
-    /** Stop a running Backup/Restore Execution */
+    /**
+     * Stop a running Backup/Restore Execution
+     *
+     * @param executionId
+     * @return
+     * @throws NoSuchJobExecutionException
+     * @throws JobExecutionNotRunningException
+     */
     public void stopExecution(Long executionId)
             throws NoSuchJobExecutionException, JobExecutionNotRunningException {
         LOGGER.info("Stopping execution id [" + executionId + "]");
@@ -630,14 +648,30 @@ public class Backup extends JobExecutionListenerSupport
         }
     }
 
-    /** Restarts a running Backup/Restore Execution */
+    /**
+     * Restarts a running Backup/Restore Execution
+     *
+     * @param executionId
+     * @return
+     * @throws JobInstanceAlreadyCompleteException
+     * @throws NoSuchJobExecutionException
+     * @throws NoSuchJobException
+     * @throws JobRestartException
+     * @throws JobParametersInvalidException
+     */
     public Long restartExecution(Long executionId)
             throws JobInstanceAlreadyCompleteException, NoSuchJobExecutionException,
                     NoSuchJobException, JobRestartException, JobParametersInvalidException {
         return jobOperator.restart(executionId);
     }
 
-    /** Abort a running Backup/Restore Execution */
+    /**
+     * Abort a running Backup/Restore Execution
+     *
+     * @param executionId
+     * @throws NoSuchJobExecutionException
+     * @throws JobExecutionAlreadyRunningException
+     */
     public void abandonExecution(Long executionId)
             throws NoSuchJobExecutionException, JobExecutionAlreadyRunningException {
         LOGGER.info("Aborting execution id [" + executionId + "]");
@@ -671,7 +705,10 @@ public class Backup extends JobExecutionListenerSupport
         }
     }
 
-    /** */
+    /**
+     * @param params
+     * @param paramsBuilder
+     */
     private void parseParams(final Hints params, JobParametersBuilder paramsBuilder) {
         if (params != null) {
             for (Entry<Object, Object> param : params.entrySet()) {
@@ -679,13 +716,11 @@ public class Backup extends JobExecutionListenerSupport
                     final Set<String> key = ((Hints.OptionKey) param.getKey()).getOptions();
                     for (String k : key) {
                         switch (k) {
-                            case PARAM_EXCLUDE_FILE_PATH:
                             case PARAM_PASSWORD_TOKENS:
                                 paramsBuilder.addString(k, (String) param.getValue());
                                 break;
                             case PARAM_PARAMETERIZE_PASSWDS:
                             case PARAM_SKIP_SETTINGS:
-                            case PARAM_SKIP_SECURITY_SETTINGS:
                             case PARAM_CLEANUP_TEMP:
                             case PARAM_DRY_RUN_MODE:
                             case PARAM_BEST_EFFORT_MODE:

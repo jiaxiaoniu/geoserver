@@ -23,11 +23,8 @@ import org.geoserver.config.GeoServer;
 import org.geoserver.platform.ServiceException;
 import org.geoserver.wfs.request.Query;
 import org.geoserver.wfs3.GetFeatureType;
-import org.geoserver.wfs3.TileDataRequest;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.util.DateRange;
-import org.geowebcache.grid.BoundingBox;
-import org.geowebcache.grid.GridSet;
 import org.locationtech.jts.geom.Envelope;
 import org.opengis.feature.type.FeatureType;
 import org.opengis.filter.Filter;
@@ -37,9 +34,6 @@ import org.opengis.filter.expression.PropertyName;
 import org.opengis.filter.identity.FeatureId;
 
 public class GetFeatureKvpRequestReader extends org.geoserver.wfs.kvp.GetFeatureKvpRequestReader {
-
-    public static final String DEFAULT_GEOMETRY = "";
-    private TileDataRequest tileData;
 
     public GetFeatureKvpRequestReader(GeoServer geoServer, FilterFactory filterFactory) {
         super(GetFeatureType.class, null, geoServer, filterFactory);
@@ -55,11 +49,6 @@ public class GetFeatureKvpRequestReader extends org.geoserver.wfs.kvp.GetFeature
         if (!kvp.containsKey("outputFormat")) {
             gf.setOutputFormat(null);
         }
-        // resolution vendor parameter:
-        if (kvp.containsKey("resolution")) {
-            gf.setResolution((Integer) kvp.get("resolution"));
-        }
-
         return gf;
     }
 
@@ -68,7 +57,12 @@ public class GetFeatureKvpRequestReader extends org.geoserver.wfs.kvp.GetFeature
         return new org.geoserver.wfs3.GetFeatureType();
     }
 
-    /** Finds all filter expressions and combines them in "AND" */
+    /**
+     * Finds all filter expressions and combines them in "AND"
+     *
+     * @param kvp
+     * @return
+     */
     private Filter getFullFilter(Map kvp) throws IOException {
         List<Filter> filters = new ArrayList<>();
         // check the various filters, considering that only one feature type at a time can be
@@ -91,12 +85,8 @@ public class GetFeatureKvpRequestReader extends org.geoserver.wfs.kvp.GetFeature
             filters.add(filterFactory.id(ids));
         }
         if (kvp.containsKey("bbox")) {
-            Object bbox = kvp.get("bbox");
-            Filter bboxFilter = bboxFilter(bbox);
+            Filter bboxFilter = bboxFilter(kvp.get("bbox"));
             filters.add(bboxFilter);
-            // trace requested bbox envelope for use on MVT output crop
-            if (bbox instanceof ReferencedEnvelope)
-                tileData.setBboxEnvelope((ReferencedEnvelope) bbox);
         }
         if (kvp.containsKey("time")) {
             Object timeSpecification = kvp.get("time");
@@ -104,41 +94,6 @@ public class GetFeatureKvpRequestReader extends org.geoserver.wfs.kvp.GetFeature
             List<String> timeProperties = getTimeProperties(typeName);
             Filter filter = buildTimeFilter(timeSpecification, timeProperties);
             filters.add(filter);
-        }
-        // BBOX filter for tileScheme, level, col, row
-        if (kvp.containsKey("level")
-                && kvp.containsKey("row")
-                && kvp.containsKey("col")
-                && kvp.containsKey("tilingScheme")) {
-            try {
-                long level = (Long) kvp.get("level");
-                long col = (Long) kvp.get("col");
-                long row = (Long) kvp.get("row");
-                GridSet gridset = (GridSet) kvp.get("tilingScheme");
-                if (gridset != null) {
-                    final long tilesHigh = gridset.getGrid((int) level).getNumTilesHigh();
-                    long y = tilesHigh - row - 1;
-                    long x = col;
-
-                    BoundingBox gbbox = gridset.boundsFromIndex(new long[] {x, y, level});
-                    filters.add(
-                            filterFactory.bbox(
-                                    DEFAULT_GEOMETRY,
-                                    gbbox.getMinX(),
-                                    gbbox.getMinY(),
-                                    gbbox.getMaxX(),
-                                    gbbox.getMaxY(),
-                                    gridset.getSrs().toString()));
-                    // tile request scoped data
-                    tileData.setTilingScheme(gridset.getName());
-                    tileData.setLevel(level);
-                    tileData.setCol(x);
-                    tileData.setRow(y);
-                }
-
-            } catch (NumberFormatException e) {
-                throw new ServiceException("Failed to parse request, invalid number", e);
-            }
         }
         return mergeFiltersAnd(filters);
     }
@@ -199,7 +154,13 @@ public class GetFeatureKvpRequestReader extends org.geoserver.wfs.kvp.GetFeature
                 .collect(Collectors.toList());
     }
 
-    /** In WFS3 it's possible to have multiple filter KVPs, and they have to be combined in AND */
+    /**
+     * In WFS3 it's possible to have multiple filter KVPs, and they have to be combined in AND
+     *
+     * @param kvp
+     * @param keys
+     * @param request
+     */
     @Override
     protected void ensureMutuallyExclusive(Map kvp, String[] keys, EObject request) {
         // no op, we actually want to handle multiple filters
@@ -249,13 +210,5 @@ public class GetFeatureKvpRequestReader extends org.geoserver.wfs.kvp.GetFeature
         }
         throw new ServiceException(
                 "Internal error, did not expect to find this value for the bbox: " + bbox);
-    }
-
-    public TileDataRequest getTileData() {
-        return tileData;
-    }
-
-    public void setTileData(TileDataRequest tileData) {
-        this.tileData = tileData;
     }
 }

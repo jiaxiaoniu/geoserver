@@ -6,23 +6,19 @@ package org.geoserver.test;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.StringReader;
 import java.util.Map;
 import net.opengis.wfs20.StoredQueryDescriptionType;
 import org.apache.commons.io.IOUtils;
-import org.geoserver.catalog.Catalog;
-import org.geoserver.catalog.WorkspaceInfo;
 import org.geoserver.catalog.impl.NamespaceInfoImpl;
 import org.geoserver.data.test.SystemTestData;
 import org.geoserver.wfs.StoredQuery;
 import org.geoserver.wfs.StoredQueryProvider;
 import org.geotools.wfs.v2_0.WFS;
 import org.geotools.wfs.v2_0.WFSConfiguration;
-import org.geotools.xsd.Parser;
+import org.geotools.xml.Parser;
 import org.junit.Test;
 import org.w3c.dom.Document;
 
@@ -168,8 +164,7 @@ public final class NamespacesWfsTest extends StationsAppSchemaTestSupport {
 
     @Test
     public void virtualServiceStoredQueryNamespacesGml31() throws Exception {
-        StoredQueryProvider storedQueryProvider =
-                new StoredQueryProvider(getCatalog(), null, true, null);
+        StoredQueryProvider storedQueryProvider = new StoredQueryProvider(getCatalog());
         try {
             createTestStoredQuery(storedQueryProvider, GML31_PARAMETERS);
 
@@ -288,8 +283,8 @@ public final class NamespacesWfsTest extends StationsAppSchemaTestSupport {
                 IOUtils.toString(
                         getClass()
                                 .getClassLoader()
-                                .getResourceAsStream("test-data/stations/stations_two_queries.xml"),
-                        "UTF-8");
+                                .getResourceAsStream(
+                                        "test-data/stations/stations_two_queries.xml"));
         Document document = postAsDOM("wfs", wfsQuery);
         checkCount(
                 WFS20_XPATH_ENGINE,
@@ -309,8 +304,8 @@ public final class NamespacesWfsTest extends StationsAppSchemaTestSupport {
         assertTrue(output.indexOf("null:Station_gml32") < 0);
         assertTrue(output.indexOf("ms_gml32:Measurement_gml32") > -1);
         assertTrue(output.indexOf("st_gml32:Station_gml32") > -1);
-        // check test1 namespace not injected:
-        assertTrue(output.indexOf("xmlns:test1=\"http://www.test1.org/test1\"") == -1);
+        // check test1 namespace injected:
+        assertTrue(output.indexOf("xmlns:test1=\"http://www.test1.org/test1\"") >= 0);
     }
 
     /**
@@ -324,8 +319,7 @@ public final class NamespacesWfsTest extends StationsAppSchemaTestSupport {
                         getClass()
                                 .getClassLoader()
                                 .getResourceAsStream(
-                                        "test-data/stations/stations_two_queries_1.1.xml"),
-                        "UTF-8");
+                                        "test-data/stations/stations_two_queries_1.1.xml"));
         Document document = postAsDOM("wfs", wfsQuery);
         String output = toString(document);
         checkCount(
@@ -344,57 +338,8 @@ public final class NamespacesWfsTest extends StationsAppSchemaTestSupport {
         assertTrue(output.indexOf("null:Station_gml31") < 0);
         assertTrue(output.indexOf("ms_gml31:Measurement_gml31") > -1);
         assertTrue(output.indexOf("st_gml31:Station_gml31") > -1);
-        // check test1 namespace not injected:
-        assertTrue(output.indexOf("xmlns:test1=\"http://www.test1.org/test1\"") == -1);
-    }
-
-    @Test
-    public void testIsolatedWorkspaceGetFeatureNamespacesWfs11() throws Exception {
-        final Catalog catalog = getCatalog();
-        WorkspaceInfo workspaceInfo = catalog.getWorkspaceByName("st_gml31");
-        workspaceInfo.setIsolated(true);
-        catalog.save(workspaceInfo);
-        try {
-            Document document =
-                    getAsDOM(
-                            "st_gml31/wfs?request=GetFeature&version=1.1.0&typename=st_gml31:Station_gml31");
-            assertEquals(
-                    "http://www.measurements_gml31.org/1.0",
-                    document.getFirstChild()
-                            .getAttributes()
-                            .getNamedItemNS(XMLNS, "ms_gml31")
-                            .getTextContent());
-            assertNull(document.getFirstChild().getAttributes().getNamedItemNS(XMLNS, "test1"));
-        } finally {
-            workspaceInfo = catalog.getWorkspaceByName("st_gml31");
-            workspaceInfo.setIsolated(false);
-            catalog.save(workspaceInfo);
-        }
-    }
-
-    @Test
-    public void testIsolatedWorkspaceGetFeatureNamespacesWfs20() throws Exception {
-        final Catalog catalog = getCatalog();
-        WorkspaceInfo workspaceInfo = catalog.getWorkspaceByName("st_gml32");
-        workspaceInfo.setIsolated(true);
-        catalog.save(workspaceInfo);
-        try {
-            Document document =
-                    getAsDOM(
-                            "st_gml32/wfs?request=GetFeature&version=2.0.0&typename=st_gml32:Station_gml32");
-            // check should not return namespace:  xmlns:test1="http://www.test1.org/test1"
-            assertEquals(
-                    "http://www.measurements_gml32.org/1.0",
-                    document.getFirstChild()
-                            .getAttributes()
-                            .getNamedItemNS(XMLNS, "ms_gml32")
-                            .getTextContent());
-            assertNull(document.getFirstChild().getAttributes().getNamedItemNS(XMLNS, "test1"));
-        } finally {
-            workspaceInfo = catalog.getWorkspaceByName("st_gml32");
-            workspaceInfo.setIsolated(false);
-            catalog.save(workspaceInfo);
-        }
+        // check test1 namespace injected:
+        assertTrue(output.indexOf("xmlns:test1=\"http://www.test1.org/test1\"") >= 0);
     }
 
     private void addTestNamespaceToCatalog() {

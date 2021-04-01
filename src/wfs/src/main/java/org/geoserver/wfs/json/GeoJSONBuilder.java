@@ -9,6 +9,7 @@ import java.io.Writer;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 import net.sf.json.JSONException;
 import net.sf.json.util.JSONBuilder;
 import org.geotools.referencing.CRS;
@@ -32,6 +33,8 @@ import org.locationtech.jts.geom.Polygon;
  * @version $Id$
  */
 public class GeoJSONBuilder extends JSONBuilder {
+
+    private final Logger LOGGER = org.geotools.util.logging.Logging.getLogger(this.getClass());
 
     private CRS.AxisOrder axisOrder = CRS.AxisOrder.EAST_NORTH;
 
@@ -159,6 +162,14 @@ public class GeoJSONBuilder extends JSONBuilder {
         return this.endArray();
     }
 
+    private JSONBuilder writeCoordinate(double x, double y) {
+        return writeCoordinate(x, y, Double.NaN);
+    }
+
+    private JSONBuilder writeCoordinate(double x, double y, double z) {
+        return writeCoordinate(x, y, z, Double.NaN);
+    }
+
     /**
      * Helper method that will encode the provided coordinate values. The order the {@code X} and
      * {@code Y} coordinates will be encoded will depend on the configured axis order.
@@ -179,16 +190,12 @@ public class GeoJSONBuilder extends JSONBuilder {
         // adjust the order of X and Y ordinates if needed
         if (axisOrder == CRS.AxisOrder.NORTH_EAST) {
             // encode latitude first and then longitude
-            if (!Double.isNaN(y)) { // for 1d linear referencing cases
-                roundedValue(y);
-            }
+            roundedValue(y);
             roundedValue(x);
         } else {
             // encode longitude first and then latitude
             roundedValue(x);
-            if (!Double.isNaN(y)) { // for 1d linear referencing cases
-                roundedValue(y);
-            }
+            roundedValue(y);
         }
         // if Z value is not available but we have a measure, we set Z value to zero
         z = Double.isNaN(z) && !Double.isNaN(m) ? 0 : z;
@@ -235,6 +242,7 @@ public class GeoJSONBuilder extends JSONBuilder {
      * Writes a polygon
      *
      * @param geometry The polygon to write
+     * @throws JSONException
      */
     private void writePolygon(Polygon geometry) throws JSONException {
         this.array();
@@ -385,6 +393,8 @@ public class GeoJSONBuilder extends JSONBuilder {
     /**
      * Set the axis order to assume all input will be provided in. Has no effect on geometries that
      * have already been written.
+     *
+     * @param axisOrder
      */
     public void setAxisOrder(CRS.AxisOrder axisOrder) {
         this.axisOrder = axisOrder;

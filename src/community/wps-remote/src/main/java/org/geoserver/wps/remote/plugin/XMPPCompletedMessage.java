@@ -96,11 +96,6 @@ public class XMPPCompletedMessage extends XMPPOutputMessage {
             } catch (IOException e) {
                 LOGGER.log(Level.FINER, e.getMessage(), e);
                 throw new IOException(e.getMessage(), e);
-            } finally {
-                // Cleanup the executing requests
-                if (xmppClient.getExecutingRequests().containsKey(pID)) {
-                    xmppClient.getExecutingRequests().remove(pID);
-                }
             }
         }
         // In any case stop the process by notifying the listeners ...
@@ -115,7 +110,16 @@ public class XMPPCompletedMessage extends XMPPOutputMessage {
         xmppClient.sendMessage(serviceJID, "topic=finish");
     }
 
-    /** */
+    /**
+     * @param xmppClient
+     * @param pID
+     * @param baseURL
+     * @param outputProducer
+     * @param key
+     * @param resultParams
+     * @return
+     * @throws Exception
+     */
     protected Object transformOutputs(
             XMPPClient xmppClient,
             final String pID,

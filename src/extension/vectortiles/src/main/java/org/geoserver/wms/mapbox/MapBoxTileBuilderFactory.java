@@ -5,7 +5,7 @@
 package org.geoserver.wms.mapbox;
 
 import com.google.common.collect.ImmutableSet;
-import java.awt.Rectangle;
+import java.awt.*;
 import java.util.Set;
 import org.geoserver.wms.vector.VectorTileBuilderFactory;
 import org.geotools.geometry.jts.ReferencedEnvelope;
@@ -39,19 +39,29 @@ public class MapBoxTileBuilderFactory implements VectorTileBuilderFactory {
      * consistent results when zooming. See this question here:
      *
      * <p>https://github.com/mapbox/vector-tiles/issues/45
+     *
+     * @return
      */
     @Override
     public boolean shouldOversampleScale() {
         return true;
     }
 
-    /** Use 16x oversampling to match actual Mapbox tile extent, which is 4096 for 900913 tiles */
+    /**
+     * Use 16x oversampling to match actual Mapbox tile extent, which is 4096 for 900913 tiles
+     *
+     * @return
+     */
     @Override
     public int getOversampleX() {
         return 16;
     }
 
-    /** Use 16x oversampling to match actual Mapbox tile extent, which is 4096 for 900913 tiles */
+    /**
+     * Use 16x oversampling to match actual Mapbox tile extent, which is 4096 for 900913 tiles
+     *
+     * @return
+     */
     @Override
     public int getOversampleY() {
         return 16;

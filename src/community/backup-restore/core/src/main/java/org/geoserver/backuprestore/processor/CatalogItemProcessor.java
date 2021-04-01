@@ -45,7 +45,12 @@ public class CatalogItemProcessor<T> extends BackupRestoreItem<T> implements Ite
     @Override
     protected void initialize(StepExecution stepExecution) {}
 
-    /** Default Constructor. */
+    /**
+     * Default Constructor.
+     *
+     * @param clazz
+     * @param backupFacade
+     */
     public CatalogItemProcessor(Class<T> clazz, Backup backupFacade) {
         super(backupFacade);
         this.clazz = clazz;
@@ -334,8 +339,10 @@ public class CatalogItemProcessor<T> extends BackupRestoreItem<T> implements Ite
      * Being sure the associated {@link NamespaceInfo} exists and is available on the GeoServer
      * Catalog.
      *
+     * @param isNew
      * @param {@link WorkspaceInfo} resource
      * @return boolean indicating whether the resource is valid or not.
+     * @throws Exception
      */
     private boolean validateWorkspace(WorkspaceInfo resource, boolean isNew) throws Exception {
         final NamespaceInfo ns = this.getCatalog().getNamespaceByPrefix(resource.getName());
@@ -366,8 +373,10 @@ public class CatalogItemProcessor<T> extends BackupRestoreItem<T> implements Ite
      * <p>Also if a default {@link DataStoreInfo} has not been defined for the current {@link
      * WorkspaceInfo}, set this one as default.
      *
+     * @param isNew
      * @param {@link DataStoreInfo} resource
      * @return boolean indicating whether the resource is valid or not.
+     * @throws Exception
      */
     private boolean validateDataStore(DataStoreInfo resource, boolean isNew) throws Exception {
         final WorkspaceInfo ws =
@@ -398,8 +407,10 @@ public class CatalogItemProcessor<T> extends BackupRestoreItem<T> implements Ite
      * Being sure the associated {@link WorkspaceInfo} exists and is available on the GeoServer
      * Catalog.
      *
+     * @param isNew
      * @param {@link CoverageStoreInfo} resource
      * @return boolean indicating whether the resource is valid or not.
+     * @throws Exception
      */
     private boolean validateCoverageStore(CoverageStoreInfo resource, boolean isNew)
             throws Exception {
@@ -429,7 +440,9 @@ public class CatalogItemProcessor<T> extends BackupRestoreItem<T> implements Ite
     /**
      * Being sure the associated {@link StoreInfo} exists and is available on the GeoServer Catalog.
      *
+     * @param isNew2
      * @param {@link ResourceInfo} resource
+     * @return
      * @return boolean indicating whether the resource is valid or not.
      */
     @SuppressWarnings({"rawtypes", "unchecked"})

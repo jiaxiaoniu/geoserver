@@ -38,6 +38,8 @@ public class SolrIndexSetup {
     /**
      * utility method to send a json post request to a web API
      *
+     * @param url
+     * @param fileName
      * @return status code
      */
     protected int postJson(String url, String fileName) {

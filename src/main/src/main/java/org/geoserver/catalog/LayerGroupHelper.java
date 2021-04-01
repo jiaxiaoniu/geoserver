@@ -14,15 +14,11 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.geoserver.catalog.LayerGroupInfo.Mode;
 import org.geoserver.catalog.impl.StyleInfoImpl;
-import org.geoserver.catalog.impl.WMSLayerInfoImpl;
 import org.geoserver.platform.GeoServerExtensions;
 import org.geoserver.platform.ServiceException;
 import org.geotools.geometry.jts.ReferencedEnvelope;
 import org.geotools.referencing.CRS;
-import org.geotools.styling.NamedStyle;
-import org.geotools.styling.Style;
-import org.geotools.styling.StyledLayer;
-import org.geotools.styling.StyledLayerDescriptor;
+import org.geotools.styling.*;
 import org.opengis.geometry.Envelope;
 import org.opengis.referencing.FactoryException;
 import org.opengis.referencing.crs.CoordinateReferenceSystem;
@@ -80,7 +76,11 @@ public class LayerGroupHelper {
         }
     }
 
-    /** Returns top level PublishedInfo, eventually expanding style groups */
+    /**
+     * Returns top level PublishedInfo, eventually expanding style groups
+     *
+     * @return
+     */
     public List<PublishedInfo> allPublished() {
         List<PublishedInfo> publisheds = new ArrayList<>();
         allPublished(group, publisheds);
@@ -123,7 +123,11 @@ public class LayerGroupHelper {
         return publisheds;
     }
 
-    /** Returns all the groups contained in this group (including the group itself) */
+    /**
+     * Returns all the groups contained in this group (including the group itself)
+     *
+     * @return
+     */
     public List<LayerGroupInfo> allGroups() {
         List<LayerGroupInfo> groups = new ArrayList<LayerGroupInfo>();
         allGroups(group, groups);
@@ -237,18 +241,7 @@ public class LayerGroupHelper {
                     PublishedInfo p = group.getLayers().get(i);
                     StyleInfo s = group.getStyles().get(i);
                     if (p instanceof LayerInfo) {
-                        StyleInfo styleInfo = group.getStyles().get(i);
-                        if (((LayerInfo) p).getResource() instanceof WMSLayerInfo) {
-                            // pre 2.16.2, raster style was by default assigned to wms remote layers
-                            // this was not a problem because the default style was always used to
-                            // request the remote server, once we introduced the possibility tos
-                            // elect remote styles this broke layer groups migrated form old data
-                            // directories, we need now to ensure that a valid style is selected
-                            WMSLayerInfo wmsLayerInfo =
-                                    (WMSLayerInfo) ((LayerInfo) p).getResource();
-                            styleInfo = getRemoteWmsLayerStyle(wmsLayerInfo, styleInfo);
-                        }
-                        styles.add(styleInfo);
+                        styles.add(group.getStyles().get(i));
                     } else if (p instanceof LayerGroupInfo) {
                         allStylesForRendering((LayerGroupInfo) p, styles, false);
                     } else if (p == null && s != null) {
@@ -286,6 +279,8 @@ public class LayerGroupHelper {
      * Use the CRS's defined bounds to populate the LayerGroup bounds.
      *
      * <p>If the CRS has no bounds then the layer group bounds are set to null instead
+     *
+     * @param crs
      */
     public void calculateBoundsFromCRS(CoordinateReferenceSystem crs) {
         Envelope crsEnvelope = CRS.getEnvelope(crs);
@@ -534,29 +529,6 @@ public class LayerGroupHelper {
                             + "'. Skipping...",
                     e);
         }
-    }
-
-    /**
-     * Ensures that cascaded WMS Layer is assigned the correct remote style if the passed style is
-     * NULL or unknown to cascaded WMS layer, the default style will returned *
-     */
-    private static StyleInfo getRemoteWmsLayerStyle(
-            WMSLayerInfo wmsLayerInfo, StyleInfo styleInfo) {
-
-        if (styleInfo == null) styleInfo = wmsLayerInfo.getDefaultStyle();
-        else if (!wmsLayerInfo.findRemoteStyleByName(styleInfo.getName()).isPresent()) {
-            if (LOGGER.isLoggable(Level.FINE)) {
-                LOGGER.fine(
-                        styleInfo.getName()
-                                + " style is not a known remote style for WMS Layer "
-                                + wmsLayerInfo
-                                + ","
-                                + " Re-configure the Resource");
-            }
-            styleInfo = WMSLayerInfoImpl.DEFAULT_ON_REMOTE;
-        }
-
-        return styleInfo;
     }
 
     /**

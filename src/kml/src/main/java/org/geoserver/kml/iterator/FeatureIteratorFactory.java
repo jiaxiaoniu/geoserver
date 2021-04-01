@@ -82,7 +82,7 @@ public class FeatureIteratorFactory implements IteratorFactory<Feature> {
                         scaleDenominator, (SimpleFeatureType) layer.getFeatureSource().getSchema());
         try {
             layer.getStyle().accept(visitor);
-            return visitor.getCopy();
+            return (Style) visitor.getCopy();
         } catch (EmptyStackException e) {
             return null;
         }

@@ -22,6 +22,7 @@ import java.util.Map;
 import javax.imageio.metadata.IIOMetadataNode;
 import javax.mail.MessagingException;
 import javax.mail.Multipart;
+import javax.mail.Session;
 import javax.mail.internet.MimeMessage;
 import javax.xml.XMLConstants;
 import javax.xml.namespace.QName;
@@ -51,7 +52,7 @@ import org.geotools.coverage.grid.io.imageio.geotiff.GeoTiffConstants;
 import org.geotools.geometry.GeneralEnvelope;
 import org.geotools.referencing.operation.matrix.XAffineTransform;
 import org.geotools.wcs.v2_0.WCSConfiguration;
-import org.geotools.xsd.Parser;
+import org.geotools.xml.Parser;
 import org.junit.After;
 import org.opengis.coverage.Coverage;
 import org.opengis.coverage.grid.GridCoverage;
@@ -242,7 +243,7 @@ public abstract class WCSTestSupport extends GeoServerSystemTestSupport {
         // init xmlunit
         Map<String, String> namespaces = new HashMap<String, String>();
         namespaces.put("wcs", "http://www.opengis.net/wcs/2.0");
-        namespaces.put("crs", "http://www.opengis.net/wcs/crs/1.0");
+        namespaces.put("wcscrs", "http://www.opengis.net/wcs/service-extension/crs/1.0");
         namespaces.put("ows", "http://www.opengis.net/ows/2.0");
         namespaces.put("xlink", "http://www.w3.org/1999/xlink");
         namespaces.put("int", "http://www.opengis.net/WCS_service-extension_interpolation/1.0");
@@ -259,7 +260,12 @@ public abstract class WCSTestSupport extends GeoServerSystemTestSupport {
         return IS_WINDOWS;
     }
 
-    /** Validates a document against the */
+    /**
+     * Validates a document against the
+     *
+     * @param dom
+     * @param configuration
+     */
     @SuppressWarnings("rawtypes")
     protected void checkValidationErrors(Document dom) throws Exception {
         Parser p = new Parser(new WCSConfiguration());
@@ -276,7 +282,11 @@ public abstract class WCSTestSupport extends GeoServerSystemTestSupport {
         }
     }
 
-    /** Marks the coverage to be cleaned when the test ends */
+    /**
+     * Marks the coverage to be cleaned when the test ends
+     *
+     * @param coverage
+     */
     protected void scheduleForCleaning(GridCoverage coverage) {
         if (coverage != null) {
             coverages.add(coverage);
@@ -304,7 +314,7 @@ public abstract class WCSTestSupport extends GeoServerSystemTestSupport {
                 dom);
         assertXpathEvaluatesTo(
                 "1",
-                "count(//wcs:ServiceMetadata/wcs:Extension/crs:CrsMetadata[crs:crsSupported = 'http://www.opengis.net/def/crs/EPSG/0/4326'])",
+                "count(//wcs:ServiceMetadata/wcs:Extension[wcscrs:crsSupported = 'http://www.opengis.net/def/crs/EPSG/0/4326'])",
                 dom);
 
         // check the interpolation extension
@@ -329,6 +339,9 @@ public abstract class WCSTestSupport extends GeoServerSystemTestSupport {
     /**
      * Gets a TIFFField node with the given tag number. This is done by searching for a TIFFField
      * with attribute number whose value is the specified tag value.
+     *
+     * @param tag DOCUMENT ME!
+     * @return DOCUMENT ME!
      */
     protected IIOMetadataNode getTiffField(Node rootNode, final int tag) {
         Node node = rootNode.getFirstChild();
@@ -407,7 +420,7 @@ public abstract class WCSTestSupport extends GeoServerSystemTestSupport {
             if (geometry != null) {
                 final MathTransform gridToCRS;
                 if (geometry instanceof GridGeometry2D) {
-                    gridToCRS = geometry.getGridToCRS();
+                    gridToCRS = ((GridGeometry2D) geometry).getGridToCRS();
                 } else {
                     gridToCRS = geometry.getGridToCRS();
                 }
@@ -430,15 +443,28 @@ public abstract class WCSTestSupport extends GeoServerSystemTestSupport {
         return (gridToCRS != null) ? XAffineTransform.getScale(gridToCRS) : Double.NaN;
     }
 
-    /** Parses a multipart message from the response */
+    /**
+     * Parses a multipart message from the response
+     *
+     * @param response
+     * @throws MessagingException
+     * @throws IOException
+     */
     protected Multipart getMultipart(MockHttpServletResponse response)
             throws MessagingException, IOException {
-        MimeMessage body = new MimeMessage(null, getBinaryInputStream(response));
+        MimeMessage body = new MimeMessage((Session) null, getBinaryInputStream(response));
         Multipart multipart = (Multipart) body.getContent();
         return multipart;
     }
 
-    /** Configures the specified dimension for a coverage */
+    /**
+     * Configures the specified dimension for a coverage
+     *
+     * @param coverageName
+     * @param metadataKey
+     * @param presentation
+     * @param resolution
+     */
     protected void setupRasterDimension(
             String coverageName,
             String metadataKey,
@@ -455,7 +481,15 @@ public abstract class WCSTestSupport extends GeoServerSystemTestSupport {
         getCatalog().save(info);
     }
 
-    /** Configures the specified dimension for a coverage */
+    /**
+     * Configures the specified dimension for a coverage
+     *
+     * @param coverageName
+     * @param metadataKey
+     * @param presentation
+     * @param resolution
+     * @param unitSymbol
+     */
     protected void setupRasterDimension(
             String coverageName,
             String metadataKey,
@@ -476,7 +510,14 @@ public abstract class WCSTestSupport extends GeoServerSystemTestSupport {
         getCatalog().save(info);
     }
 
-    /** Clears dimension information from the specified coverage */
+    /**
+     * Clears dimension information from the specified coverage
+     *
+     * @param coverageName
+     * @param metadataKey
+     * @param presentation
+     * @param resolution
+     */
     protected void clearDimensions(String coverageName) {
         CoverageInfo info = getCatalog().getCoverageByName(coverageName);
         info.getMetadata().remove(ResourceInfo.TIME);

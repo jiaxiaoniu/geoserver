@@ -46,7 +46,11 @@ public abstract class AbstractExecutionAdapter {
 
     private Filter liFilter;
 
-    /** Default Constructor */
+    /**
+     * Default Constructor
+     *
+     * @param jobExecution
+     */
     public AbstractExecutionAdapter(JobExecution jobExecution, Integer totalNumberOfSteps) {
         this.delegate = jobExecution;
         this.totalNumberOfSteps = totalNumberOfSteps;
@@ -62,7 +66,11 @@ public abstract class AbstractExecutionAdapter {
         this.delegate = delegate;
     }
 
-    /** The Unique Job Execution ID */
+    /**
+     * The Unique Job Execution ID
+     *
+     * @return
+     */
     public Long getId() {
         if (delegate != null) {
             return delegate.getId();
@@ -88,7 +96,11 @@ public abstract class AbstractExecutionAdapter {
         return delegate.getJobParameters();
     }
 
-    /** The Spring Batch Job TimeStamp */
+    /**
+     * The Spring Batch Job TimeStamp
+     *
+     * @return
+     */
     public Date getTime() {
         return new Date(delegate.getJobParameters().getLong(Backup.PARAM_TIME));
     }
@@ -113,12 +125,20 @@ public abstract class AbstractExecutionAdapter {
         return delegate.getExitStatus();
     }
 
-    /** Set {@link ExitStatus} of the current Spring Batch Execution */
+    /**
+     * Set {@link ExitStatus} of the current Spring Batch Execution
+     *
+     * @param exitStatus
+     */
     public void setExitStatus(ExitStatus exitStatus) {
         delegate.setExitStatus(exitStatus);
     }
 
-    /** Returns all {@link StepExecution}s of the current Spring Batch Execution */
+    /**
+     * Returns all {@link StepExecution}s of the current Spring Batch Execution
+     *
+     * @return
+     */
     public Collection<StepExecution> getStepExecutions() {
         return delegate.getStepExecutions();
     }
@@ -170,7 +190,11 @@ public abstract class AbstractExecutionAdapter {
         return warningsList;
     }
 
-    /** Adds exceptions to the current executions marking it as FAILED. */
+    /**
+     * Adds exceptions to the current executions marking it as FAILED.
+     *
+     * @param exceptions
+     */
     public void addFailureExceptions(List<Throwable> exceptions) {
         for (Throwable t : exceptions) {
             this.delegate.addFailureException(t);
@@ -179,7 +203,11 @@ public abstract class AbstractExecutionAdapter {
         this.delegate.setExitStatus(ExitStatus.FAILED);
     }
 
-    /** Adds exceptions to the current executions as Warnings. */
+    /**
+     * Adds exceptions to the current executions as Warnings.
+     *
+     * @param exceptions
+     */
     public void addWarningExceptions(List<Throwable> exceptions) {
         for (Throwable t : exceptions) {
             this.warningsList.add(t);
@@ -195,7 +223,11 @@ public abstract class AbstractExecutionAdapter {
         return totalNumberOfSteps;
     }
 
-    /** Returns the current number of executed steps. */
+    /**
+     * Returns the current number of executed steps.
+     *
+     * @return
+     */
     public Integer getExecutedSteps() {
         return delegate.getStepExecutions().size();
     }

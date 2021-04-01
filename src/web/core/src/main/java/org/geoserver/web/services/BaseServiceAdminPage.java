@@ -6,8 +6,10 @@
 package org.geoserver.web.services;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import org.apache.wicket.Component;
 import org.apache.wicket.WicketRuntimeException;
 import org.apache.wicket.ajax.AjaxRequestTarget;
 import org.apache.wicket.ajax.form.AjaxFormComponentUpdatingBehavior;
@@ -35,7 +37,6 @@ import org.geoserver.config.ServiceInfo;
 import org.geoserver.platform.GeoServerEnvironment;
 import org.geoserver.platform.GeoServerExtensions;
 import org.geoserver.web.GeoServerSecuredPage;
-import org.geoserver.web.GeoserverAjaxSubmitLink;
 import org.geoserver.web.data.workspace.WorkspaceChoiceRenderer;
 import org.geoserver.web.data.workspace.WorkspacesModel;
 import org.geoserver.web.util.SerializableConsumer;
@@ -78,11 +79,11 @@ public abstract class BaseServiceAdminPage<T extends ServiceInfo> extends GeoSer
 
     public BaseServiceAdminPage(PageParameters pageParams) {
         String wsName = pageParams.get("workspace").toString();
-        init(new ServiceModel<>(getServiceClass(), wsName));
+        init(new ServiceModel(getServiceClass(), wsName));
     }
 
     public BaseServiceAdminPage(T service) {
-        init(new ServiceModel<>(service));
+        init(new ServiceModel(service));
     }
 
     void init(final IModel<T> infoModel) {
@@ -91,7 +92,7 @@ public abstract class BaseServiceAdminPage<T extends ServiceInfo> extends GeoSer
         dialog = new GeoServerDialog("dialog");
         add(dialog);
 
-        Form<T> form = new Form<>("form", new CompoundPropertyModel<>(infoModel));
+        Form form = new Form("form", new CompoundPropertyModel(infoModel));
         add(form);
 
         if (service.getWorkspace() == null) {
@@ -110,7 +111,7 @@ public abstract class BaseServiceAdminPage<T extends ServiceInfo> extends GeoSer
                         new StringResourceModel("service.enabled", this)
                                 .setParameters(getServiceName())));
         form.add(new TextField("maintainer"));
-        TextField<String> onlineResource = new TextField<>("onlineResource");
+        TextField onlineResource = new TextField("onlineResource");
 
         final GeoServerEnvironment gsEnvironment =
                 GeoServerExtensions.bean(GeoServerEnvironment.class);
@@ -128,7 +129,7 @@ public abstract class BaseServiceAdminPage<T extends ServiceInfo> extends GeoSer
         form.add(
                 new KeywordsEditor(
                         "keywords",
-                        LiveCollectionModel.list(new PropertyModel<>(infoModel, "keywords"))));
+                        LiveCollectionModel.list(new PropertyModel(infoModel, "keywords"))));
         form.add(new TextField("fees"));
         form.add(new TextField("accessConstraints"));
 
@@ -140,11 +141,17 @@ public abstract class BaseServiceAdminPage<T extends ServiceInfo> extends GeoSer
         form.add(extensionPanels);
 
         SubmitLink submit =
-                new SubmitLink("submit", new StringResourceModel("save", null, null)) {
+                new SubmitLink("submit", new StringResourceModel("save", (Component) null, null)) {
                     @Override
                     public void onSubmit() {
                         try {
-                            onSave(infoModel, true);
+                            handleSubmit((T) infoModel.getObject());
+                            // execute all submit hooks
+                            onSubmitHooks.forEach(
+                                    x -> {
+                                        x.accept(null);
+                                    });
+                            doReturn();
                         } catch (IllegalArgumentException ex) {
                             error(ex.getMessage());
                         } catch (Exception e) {
@@ -154,8 +161,6 @@ public abstract class BaseServiceAdminPage<T extends ServiceInfo> extends GeoSer
                 };
         form.add(submit);
 
-        form.add(applyLink(infoModel, form));
-
         Button cancel =
                 new Button("cancel") {
                     public void onSubmit() {
@@ -164,39 +169,6 @@ public abstract class BaseServiceAdminPage<T extends ServiceInfo> extends GeoSer
                 };
         form.add(cancel);
         cancel.setDefaultFormProcessing(false);
-    }
-
-    protected void onSave(IModel<T> infoModel, boolean doReturn) {
-        handleSubmit(infoModel.getObject());
-        // execute all submit hooks
-        onSubmitHooks.forEach(
-                x -> {
-                    x.accept(null);
-                });
-        if (doReturn) {
-            doReturn();
-        }
-    }
-
-    private GeoserverAjaxSubmitLink applyLink(IModel<T> infoModel, Form form) {
-        return new GeoserverAjaxSubmitLink("apply", form, this) {
-
-            @Override
-            protected void onError(AjaxRequestTarget target, Form form) {
-                super.onError(target, form);
-                target.add(form);
-            }
-
-            @Override
-            protected void onSubmitInternal(AjaxRequestTarget target, Form<?> form) {
-                try {
-                    onSave(infoModel, false);
-                } catch (IllegalArgumentException e) {
-                    form.error(e.getMessage());
-                    target.add(form);
-                }
-            }
-        };
     }
 
     protected ListView createExtensionPanelList(String id, final IModel infoModel) {
@@ -259,13 +231,16 @@ public abstract class BaseServiceAdminPage<T extends ServiceInfo> extends GeoSer
      * Callback for submit.
      *
      * <p>This implementation simply saves the service. Subclasses may extend / override if need be.
+     *
+     * @param info
      */
     protected void handleSubmit(T info) {
         if (info.getId() != null) {
             getGeoServer().save(info);
+        } else {
+            // means a non attached instance was passed to us, do nothing, up to caller to add it
+            // to configuration
         }
-        // else means a non attached instance was passed to us, do nothing, up to caller to add it
-        // to configuration
     }
 
     /** The string to use when representing this service to users. Subclasses must override. */
@@ -296,7 +271,6 @@ public abstract class BaseServiceAdminPage<T extends ServiceInfo> extends GeoSer
         }
 
         @Override
-        @SuppressWarnings("unchecked") // casts to T
         protected T load() {
             if (id != null) {
                 return (T) getGeoServer().getService(id, getServiceClass());
@@ -323,7 +297,7 @@ public abstract class BaseServiceAdminPage<T extends ServiceInfo> extends GeoSer
         }
     }
 
-    class ServiceFilteredWorkspacesModel extends LoadableDetachableModel<List<WorkspaceInfo>> {
+    class ServiceFilteredWorkspacesModel extends LoadableDetachableModel {
 
         WorkspacesModel wsModel;
 
@@ -332,8 +306,8 @@ public abstract class BaseServiceAdminPage<T extends ServiceInfo> extends GeoSer
         }
 
         @Override
-        protected List<WorkspaceInfo> load() {
-            List<WorkspaceInfo> workspaces = wsModel.getObject();
+        protected Object load() {
+            Collection<WorkspaceInfo> workspaces = (Collection<WorkspaceInfo>) wsModel.getObject();
 
             GeoServer gs = getGeoServer();
             for (Iterator<WorkspaceInfo> it = workspaces.iterator(); it.hasNext(); ) {

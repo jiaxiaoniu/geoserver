@@ -5,7 +5,7 @@
 package org.geoserver.wps.ppio;
 
 import static org.hamcrest.CoreMatchers.startsWith;
-import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
@@ -18,7 +18,7 @@ public class ShapeZipPPIOTest {
     @Test
     public void testDecodeBadEntryName() throws Exception {
         try (InputStream input = ZipTestUtil.getZipSlipInput()) {
-            new ShapeZipPPIO(null, null, null, null).decode(input);
+            new ShapeZipPPIO(null).decode(input);
             fail("Expected decompression to fail");
         } catch (IOException e) {
             assertThat(e.getMessage(), startsWith("Entry is outside of the target directory"));

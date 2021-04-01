@@ -46,7 +46,7 @@ import org.geoserver.web.GeoServerApplication;
 import org.geoserver.web.GeoServerSecuredPage;
 import org.geoserver.web.GeoServerUnlockablePage;
 import org.geoserver.web.wicket.GeoServerDialog;
-import org.geotools.util.factory.Hints;
+import org.geotools.factory.Hints;
 import org.geotools.util.logging.Logging;
 import org.opengis.filter.Filter;
 import org.springframework.batch.core.launch.JobExecutionNotRunningException;
@@ -727,7 +727,10 @@ public class BackupRestoreDataPage extends GeoServerSecuredPage implements GeoSe
         form.add(restoreExecutionsTable);
     }
 
-    /** */
+    /**
+     * @return
+     * @throws Exception
+     */
     protected Resource getBackupRestoreArchiveResource(boolean isBackup) throws Exception {
         Resource archiveFile = null;
         try {

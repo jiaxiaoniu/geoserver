@@ -4,10 +4,10 @@
  */
 package org.geoserver.wcs2_0.kvp;
 
+import static junit.framework.Assert.assertEquals;
 import static org.custommonkey.xmlunit.XMLAssert.assertXpathEvaluatesTo;
 import static org.geoserver.data.test.MockData.TASMANIA_DEM;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 import org.geoserver.catalog.Catalog;
 import org.geoserver.catalog.CoverageInfo;
@@ -69,8 +69,7 @@ public class GetCapabilitiesTest extends WCSTestSupport {
         // print(dom);
         NodeList list =
                 xpath.getMatchingNodes(
-                        "//wcs:ServiceMetadata/wcs:Extension/crs:CrsMetadata/crs:crsSupported",
-                        dom);
+                        "//wcs:ServiceMetadata/wcs:Extension/wcscrs:crsSupported", dom);
         assertTrue(list.getLength() > 1000);
 
         // setup limited list
@@ -83,8 +82,7 @@ public class GetCapabilitiesTest extends WCSTestSupport {
         // print(dom);
         list =
                 xpath.getMatchingNodes(
-                        "//wcs:ServiceMetadata/wcs:Extension/crs:CrsMetadata/crs:crsSupported",
-                        dom);
+                        "//wcs:ServiceMetadata/wcs:Extension/wcscrs:crsSupported", dom);
         assertEquals(2, list.getLength());
     }
 

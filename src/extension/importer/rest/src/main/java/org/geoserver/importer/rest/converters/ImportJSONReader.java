@@ -11,9 +11,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import net.sf.json.JSONArray;
 import net.sf.json.JSONObject;
 import org.apache.commons.io.IOUtils;
@@ -269,8 +267,7 @@ public class ImportJSONReader {
         return task;
     }
 
-    @SuppressWarnings("unchecked")
-    TransformChain<? extends ImportTransform> transformChain(JSONObject json) throws IOException {
+    TransformChain transformChain(JSONObject json) throws IOException {
         String type = json.getString("type");
         TransformChain chain = null;
         if ("vector".equalsIgnoreCase(type) || "VectorTransformChain".equalsIgnoreCase(type)) {
@@ -297,7 +294,7 @@ public class ImportJSONReader {
     }
 
     public ImportTransform transform(String json) throws IOException {
-        return transform(IOUtils.toInputStream(json, "UTF-8"));
+        return transform(IOUtils.toInputStream(json));
     }
 
     public ImportTransform transform(InputStream inputStream) throws IOException {
@@ -428,8 +425,7 @@ public class ImportJSONReader {
             if (json.has("charsetEncoding")) {
                 // check if charsetEncoding is supported
                 // dont upload a charset which not supported
-                if (!Charset.isSupported(json.getString("charsetEncoding")))
-                    throw new IOException(json.getString("charsetEncoding") + " is not supported");
+                Charset.isSupported(json.getString("charsetEncoding"));
                 importFileData.setCharsetEncoding(json.getString("charsetEncoding"));
             }
             return importFileData;
@@ -471,23 +467,18 @@ public class ImportJSONReader {
             m.setName(json.getString("name"));
         }
         if (json.containsKey("time")) {
-            Map<String, Object> time = jsonAsMap(json);
+            JSONObject time = json.getJSONObject("time");
             if (!time.containsKey("mode")) {
                 throw new IllegalArgumentException(
                         "time object must specific mode property as "
                                 + "one of "
-                                + Arrays.asList(TimeMode.values()));
+                                + TimeMode.values());
             }
 
-            m.setTimeMode(TimeMode.valueOf(((String) time.get("mode")).toUpperCase()));
+            m.setTimeMode(TimeMode.valueOf(time.getString("mode").toUpperCase()));
             m.getTimeHandler().init(time);
         }
         return m;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> jsonAsMap(JSONObject json) {
-        return json.getJSONObject("time");
     }
 
     Archive archive(JSONObject json) throws IOException {
@@ -502,7 +493,7 @@ public class ImportJSONReader {
         }
     }
 
-    Database database(JSONObject json) {
+    Database database(JSONObject json) throws IOException {
         throw new UnsupportedOperationException("TODO: implement");
     }
 

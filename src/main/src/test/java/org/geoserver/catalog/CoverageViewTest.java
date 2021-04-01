@@ -10,6 +10,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
+import it.geosolutions.jaiext.JAIExt;
 import java.awt.image.RenderedImage;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -42,11 +43,13 @@ import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.feature.visitor.MinVisitor;
 import org.geotools.geometry.GeneralEnvelope;
 import org.geotools.geometry.jts.ReferencedEnvelope;
-import org.geotools.image.util.ImageUtilities;
 import org.geotools.parameter.DefaultParameterDescriptor;
 import org.geotools.referencing.CRS;
 import org.geotools.referencing.operation.transform.AffineTransform2D;
+import org.geotools.resources.image.ImageUtilities;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.opengis.coverage.grid.GridCoverage;
 import org.opengis.coverage.grid.GridCoverageReader;
@@ -70,6 +73,16 @@ public class CoverageViewTest extends GeoServerSystemTestSupport {
     public void cleanupCatalog() {
         // attempt to solve intermittend build failure
         getGeoServer().reset();
+    }
+
+    @BeforeClass
+    public static void setupJaiExt() {
+        JAIExt.initJAIEXT(true, true);
+    }
+
+    @AfterClass
+    public static void tearDownJaiExt() {
+        JAIExt.initJAIEXT(false, false);
     }
 
     static CoordinateReferenceSystem UTM32N;
@@ -454,11 +467,14 @@ public class CoverageViewTest extends GeoServerSystemTestSupport {
                                 null,
                                 bands)
                         .createValue());
-        return parameters.toArray(new GeneralParameterValue[parameters.size()]);
+        return (GeneralParameterValue[])
+                parameters.toArray(new GeneralParameterValue[parameters.size()]);
     }
 
     /**
      * Tests a heterogeneous view without setting any extra configuration (falling back on defaults)
+     *
+     * @throws Exception
      */
     @Test
     public void testHeterogeneousViewDefaults() throws Exception {
@@ -508,6 +524,8 @@ public class CoverageViewTest extends GeoServerSystemTestSupport {
 
     /**
      * Tests a heterogeneous view without setting any extra configuration (falling back on defaults)
+     *
+     * @throws Exception
      */
     @Test
     public void testHeterogeneousViewIntersectionEnvelope() throws Exception {
@@ -606,7 +624,11 @@ public class CoverageViewTest extends GeoServerSystemTestSupport {
         assertEquals(resY, Math.abs(mt.getScaleY()), 1);
     }
 
-    /** Hit the view outside its bounds, should return null */
+    /**
+     * Hit the view outside its bounds, should return null
+     *
+     * @throws Exception
+     */
     @Test
     public void testHeterogeneousViewOutsideBounds() throws Exception {
         CoverageInfo info =

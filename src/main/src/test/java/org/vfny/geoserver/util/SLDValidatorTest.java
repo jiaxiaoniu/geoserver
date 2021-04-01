@@ -39,8 +39,8 @@ public class SLDValidatorTest {
         assertTrue(errors.isEmpty());
     }
 
-    void showErrors(List<Exception> errors) {
-        for (Exception err : errors) {
+    void showErrors(List errors) {
+        for (Exception err : (List<Exception>) errors) {
             System.out.println(err.getMessage());
         }
     }

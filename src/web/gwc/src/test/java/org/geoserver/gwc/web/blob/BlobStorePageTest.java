@@ -4,7 +4,6 @@
  */
 package org.geoserver.gwc.web.blob;
 
-import static org.geowebcache.config.FileBlobStoreInfo.*;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -78,8 +77,7 @@ public class BlobStorePageTest extends GeoServerWicketTestSupport {
         formTester.setValue("name", "myblobstore");
         formTester.setValue("enabled", false);
         formTester.setValue(
-                "blobSpecificPanel:baseDirectory:fileInput:border:border_body:paramValue",
-                "/mydir");
+                "blobSpecificPanel:baseDirectory:border:border_body:paramValue", "/mydir");
         tester.executeAjaxEvent("blobConfigContainer:blobStoreForm:save", "click");
 
         tester.assertNoErrorMessage();
@@ -112,8 +110,7 @@ public class BlobStorePageTest extends GeoServerWicketTestSupport {
         FormTester formTester = tester.newFormTester("blobConfigContainer:blobStoreForm");
         formTester.setValue("name", "yourblobstore");
         formTester.setValue(
-                "blobSpecificPanel:baseDirectory:fileInput:border:border_body:paramValue",
-                "/yourdir");
+                "blobSpecificPanel:baseDirectory:border:border_body:paramValue", "/yourdir");
         formTester.submit();
         tester.executeAjaxEvent("blobConfigContainer:blobStoreForm:save", "click");
 
@@ -143,16 +140,13 @@ public class BlobStorePageTest extends GeoServerWicketTestSupport {
         BlobStorePage page = new BlobStorePage();
 
         tester.startPage(page);
-        print(page, true, true, true);
         executeAjaxEventBehavior("selector:typeOfBlobStore", "change", "0");
-        print(tester.getLastRenderedPage(), true, true);
 
         FormTester formTester = tester.newFormTester("blobConfigContainer:blobStoreForm");
         formTester.setValue("name", "myblobstore");
         formTester.setValue("enabled", false);
         formTester.setValue(
-                "blobSpecificPanel:baseDirectory:fileInput:border:border_body:paramValue",
-                "/mydir");
+                "blobSpecificPanel:baseDirectory:border:border_body:paramValue", "/mydir");
         tester.executeAjaxEvent("blobConfigContainer:blobStoreForm:save", "click");
 
         tester.assertErrorMessages(
@@ -186,8 +180,7 @@ public class BlobStorePageTest extends GeoServerWicketTestSupport {
         FormTester formTester = tester.newFormTester("blobConfigContainer:blobStoreForm");
         formTester.setValue("name", "myblobstore");
         formTester.setValue(
-                "blobSpecificPanel:baseDirectory:fileInput:border:border_body:paramValue",
-                "/yourdir");
+                "blobSpecificPanel:baseDirectory:border:border_body:paramValue", "/yourdir");
         formTester.submit();
         tester.executeAjaxEvent("blobConfigContainer:blobStoreForm:save", "click");
 
@@ -201,30 +194,5 @@ public class BlobStorePageTest extends GeoServerWicketTestSupport {
         // test updated id!
         layer = GWC.get().getTileLayerByName("cite:Lakes");
         assertEquals("myblobstore", layer.getBlobStoreId());
-    }
-
-    @Test
-    public void testLayout() throws ConfigurationException {
-        for (PathGeneratorType type : PathGeneratorType.values()) {
-            BlobStorePage page = new BlobStorePage();
-            tester.startPage(page);
-            executeAjaxEventBehavior("selector:typeOfBlobStore", "change", "0");
-
-            FormTester formTester = tester.newFormTester("blobConfigContainer:blobStoreForm");
-            formTester.setValue("name", "myblobstore");
-            formTester.setValue("enabled", false);
-            formTester.setValue(
-                    "blobSpecificPanel:baseDirectory:fileInput:border:border_body:paramValue",
-                    "/mydir");
-            formTester.select("blobSpecificPanel:fileSystemLayout", type.ordinal());
-            tester.executeAjaxEvent("blobConfigContainer:blobStoreForm:save", "click");
-
-            tester.assertNoErrorMessage();
-
-            List<BlobStoreInfo> blobStores = GWC.get().getBlobStores();
-            FileBlobStoreInfo config = (FileBlobStoreInfo) blobStores.get(0);
-            assertEquals(type, config.getPathGeneratorType());
-            GWC.get().removeBlobStores(Arrays.asList(config.getName()));
-        }
     }
 }

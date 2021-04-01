@@ -7,9 +7,9 @@ package org.geoserver.web.data.store;
 
 import static org.junit.Assert.assertEquals;
 
-import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
+import org.apache.wicket.model.IModel;
 import org.apache.wicket.model.Model;
 import org.geoserver.web.data.store.DefaultDataStoreEditPanel.URLModel;
 import org.junit.Test;
@@ -27,8 +27,9 @@ public class URLModelTest {
     /** Test a bug validating the URL protocol disallowing to use 'https://' as valid one. */
     @Test
     public void testHttpsURLSetValue() {
-        Map<String, Serializable> params = new HashMap<>();
-        URLModel urlModel = new URLModel(Model.ofMap(params), URL_PARAM);
+        Map<String, Object> params = new HashMap<String, Object>();
+        IModel model = Model.ofMap(params);
+        URLModel urlModel = new URLModel(model, URL_PARAM);
         urlModel.setObject(URL_VALUE);
         assertEquals(URL_VALUE, urlModel.getObject());
     }
@@ -37,8 +38,9 @@ public class URLModelTest {
     @Test
     public void testHttpURLSetValue() {
         final String urlValue = "http://www.geoserver.org/";
-        Map<String, Serializable> params = new HashMap<>();
-        URLModel urlModel = new URLModel(Model.ofMap(params), URL_PARAM);
+        Map<String, Object> params = new HashMap<String, Object>();
+        IModel model = Model.ofMap(params);
+        URLModel urlModel = new URLModel(model, URL_PARAM);
         urlModel.setObject(urlValue);
         assertEquals(urlValue, urlModel.getObject());
     }
@@ -47,8 +49,9 @@ public class URLModelTest {
     @Test
     public void testFileURLSetValue() {
         final String urlValue = "file:///home/fernando/mino.xml";
-        Map<String, Serializable> params = new HashMap<>();
-        URLModel urlModel = new URLModel(Model.ofMap(params), URL_PARAM);
+        Map<String, Object> params = new HashMap<String, Object>();
+        IModel model = Model.ofMap(params);
+        URLModel urlModel = new URLModel(model, URL_PARAM);
         urlModel.setObject(urlValue);
         assertEquals(urlValue, urlModel.getObject());
     }
@@ -57,8 +60,9 @@ public class URLModelTest {
     @Test
     public void testNonProtocolUrl() {
         final String urlValue = "/home/geosolutions/file.xml";
-        Map<String, Serializable> params = new HashMap<>();
-        URLModel urlModel = new URLModel(Model.ofMap(params), URL_PARAM);
+        Map<String, Object> params = new HashMap<String, Object>();
+        IModel model = Model.ofMap(params);
+        URLModel urlModel = new URLModel(model, URL_PARAM);
         urlModel.setObject(urlValue);
         assertEquals("file://" + urlValue, urlModel.getObject());
     }

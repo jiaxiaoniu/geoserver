@@ -65,7 +65,12 @@ public class LayerWorkspaceTest extends WMSTestSupport {
         assertTrue(orderedNames.equals(originalList));
     }
 
-    /** removes prefix from layer name */
+    /**
+     * removes prefix from layer name
+     *
+     * @param prefixedName
+     * @return
+     */
     private String removeLayerPrefix(String prefixedName) {
         if (prefixedName.indexOf(":") > -1) {
             return prefixedName.split(":")[1];
@@ -73,7 +78,13 @@ public class LayerWorkspaceTest extends WMSTestSupport {
         return prefixedName;
     }
 
-    /** returns list of prefixed layer names from document */
+    /**
+     * returns list of prefixed layer names from document
+     *
+     * @param doc
+     * @return
+     * @throws Exception
+     */
     private List<String> layerNameList(Document doc) throws Exception {
         List<Node> nlist = xpathList("//WMT_MS_Capabilities/Capability/Layer/Layer/Name", doc);
         List<String> result = new ArrayList<>();
