@@ -13,7 +13,13 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.nio.charset.Charset;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.geoserver.ows.LocalPublished;
@@ -22,9 +28,18 @@ import org.geoserver.ows.URLMangler.URLType;
 import org.geoserver.ows.util.ResponseUtils;
 import org.geoserver.platform.ServiceException;
 import org.geoserver.template.TemplateUtils;
-import org.geoserver.wms.*;
+import org.geoserver.wms.GetMapOutputFormat;
+import org.geoserver.wms.GetMapRequest;
+import org.geoserver.wms.MapLayerInfo;
+import org.geoserver.wms.MapProducerCapabilities;
+import org.geoserver.wms.WMS;
+import org.geoserver.wms.WMSMapContent;
 import org.geotools.geometry.jts.ReferencedEnvelope;
-import org.geotools.map.*;
+import org.geotools.map.FeatureLayer;
+import org.geotools.map.GridReaderLayer;
+import org.geotools.map.Layer;
+import org.geotools.ows.wms.map.WMSLayer;
+import org.geotools.ows.wmts.map.WMTSMapLayer;
 import org.geotools.referencing.CRS;
 import org.geotools.referencing.CRS.AxisOrder;
 import org.geotools.renderer.crs.ProjectionHandler;
@@ -109,7 +124,9 @@ public abstract class AbstractOpenLayersMapOutputFormat implements GetMapOutputF
             GetMapRequest request = mapContent.getRequest();
             map.put("request", request);
             map.put("yx", String.valueOf(isWms13FlippedCRS(request.getCrs())));
-            map.put("maxResolution", new Double(getMaxResolution(mapContent.getRenderingArea())));
+            map.put(
+                    "maxResolution",
+                    Double.valueOf(getMaxResolution(mapContent.getRenderingArea())));
             ProjectionHandler handler = null;
             try {
                 handler =
@@ -181,20 +198,10 @@ public abstract class AbstractOpenLayersMapOutputFormat implements GetMapOutputF
         return url.substring(startFrom);
     }
 
-    /**
-     * Returns the units for the current OL version
-     *
-     * @param mapContent
-     * @return
-     */
+    /** Returns the units for the current OL version */
     protected abstract String getUnits(WMSMapContent mapContent);
 
-    /**
-     * Returns the freemarker template used to generate the output
-     *
-     * @param mapContent
-     * @return
-     */
+    /** Returns the freemarker template used to generate the output */
     protected abstract String getTemplateName(WMSMapContent mapContent);
 
     private boolean isWms13FlippedCRS(CoordinateReferenceSystem crs) {
@@ -215,8 +222,6 @@ public abstract class AbstractOpenLayersMapOutputFormat implements GetMapOutputF
     /**
      * Guesses if the map context is made only of coverage layers by looking at the wrapping feature
      * type. Ugly, if you come up with better means of doing so, fix it.
-     *
-     * @param mapContent
      */
     private boolean hasOnlyCoverages(WMSMapContent mapContent) {
         for (Layer layer : mapContent.layers()) {
@@ -286,8 +291,6 @@ public abstract class AbstractOpenLayersMapOutputFormat implements GetMapOutputF
      * Returns a list of maps with the name and value of each parameter that we have to forward to
      * OpenLayers. Forwarded parameters are all the provided ones, besides a short set contained in
      * {@link #ignoredParameters}.
-     *
-     * @param rawKvp
      */
     private List<Map<String, String>> getLayerParameter(Map<String, String> rawKvp) {
         List<Map<String, String>> result = new ArrayList<>(rawKvp.size());
@@ -321,8 +324,6 @@ public abstract class AbstractOpenLayersMapOutputFormat implements GetMapOutputF
     /**
      * Makes sure the url does not end with "/", otherwise we would have URL lik
      * "http://localhost:8080/geoserver//wms?LAYERS=..." and Jetty 6.1 won't digest them...
-     *
-     * @param baseUrl
      */
     private String canonicUrl(String baseUrl) {
         if (baseUrl.endsWith("/")) {

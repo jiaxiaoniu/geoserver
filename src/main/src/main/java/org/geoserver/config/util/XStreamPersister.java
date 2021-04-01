@@ -25,7 +25,6 @@ import com.thoughtworks.xstream.converters.reflection.ReflectionProvider;
 import com.thoughtworks.xstream.converters.reflection.SortableFieldKeySorter;
 import com.thoughtworks.xstream.converters.reflection.SunUnsafeReflectionProvider;
 import com.thoughtworks.xstream.core.ClassLoaderReference;
-import com.thoughtworks.xstream.io.ExtendedHierarchicalStreamWriterHelper;
 import com.thoughtworks.xstream.io.HierarchicalStreamDriver;
 import com.thoughtworks.xstream.io.HierarchicalStreamReader;
 import com.thoughtworks.xstream.io.HierarchicalStreamWriter;
@@ -44,6 +43,7 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -56,7 +56,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.apache.commons.collections.MultiHashMap;
+import org.apache.commons.collections4.MultiValuedMap;
+import org.apache.commons.collections4.multimap.HashSetValuedHashMap;
 import org.codehaus.jettison.json.JSONArray;
 import org.codehaus.jettison.mapped.MappedXMLStreamWriter;
 import org.codehaus.jettison.util.FastStack;
@@ -144,6 +145,7 @@ import org.geoserver.security.GeoServerSecurityManager;
 import org.geoserver.security.SecureCatalogImpl;
 import org.geotools.coverage.grid.GeneralGridEnvelope;
 import org.geotools.coverage.grid.GridGeometry2D;
+import org.geotools.data.util.MeasureConverterFactory;
 import org.geotools.geometry.GeneralEnvelope;
 import org.geotools.geometry.jts.Geometries;
 import org.geotools.geometry.jts.ReferencedEnvelope;
@@ -158,7 +160,6 @@ import org.geotools.referencing.crs.DefaultProjectedCRS;
 import org.geotools.referencing.operation.transform.AffineTransform2D;
 import org.geotools.referencing.wkt.Formattable;
 import org.geotools.util.Converters;
-import org.geotools.util.MeasureConverterFactory;
 import org.geotools.util.NumberRange;
 import org.geotools.util.logging.Logging;
 import org.locationtech.jts.geom.Geometry;
@@ -223,27 +224,12 @@ public class XStreamPersister {
         protected void postEncodeLayerGroup(
                 LayerGroupInfo ls, HierarchicalStreamWriter writer, MarshallingContext context) {}
 
-        /**
-         * @deprecated use {@link #postEncodeReference(Object, String, String,
-         *     HierarchicalStreamWriter, MarshallingContext)}
-         */
-        protected void postEncodeReference(
-                Object obj,
-                String ref,
-                HierarchicalStreamWriter writer,
-                MarshallingContext context) {}
-
         protected void postEncodeReference(
                 Object obj,
                 String ref,
                 String prefix,
                 HierarchicalStreamWriter writer,
-                MarshallingContext context) {
-            if (prefix == null) {
-                // call other method for backward compatability
-                postEncodeReference(obj, ref, writer, context);
-            }
-        }
+                MarshallingContext context) {}
 
         protected void postEncodeWMSStore(
                 WMSStoreInfo store, HierarchicalStreamWriter writer, MarshallingContext context) {}
@@ -312,8 +298,6 @@ public class XStreamPersister {
     /**
      * Sets null handling in proxy objects. Defaults to unwrap. If set to false, proxy object are
      * not transformed to nulls.
-     *
-     * @param unwrapNulls
      */
     public void setUnwrapNulls(boolean unwrapNulls) {
         this.unwrapNulls = unwrapNulls;
@@ -323,7 +307,7 @@ public class XStreamPersister {
         // Default implementations
         initImplementationDefaults(xs);
 
-        // ignore unkonwn fields, this should help using data dirs that has new config elements
+        // ignore unknown fields, this should help using data dirs that has new config elements
         // with older versions of GeoServer
         xs.ignoreUnknownElements();
 
@@ -389,7 +373,7 @@ public class XStreamPersister {
         xs.omitField(impl(DefaultCatalogFacade.class), "layerGroups");
 
         xs.registerLocalConverter(
-                DefaultCatalogFacade.class, "stores", new StoreMultiHashMapConverter());
+                DefaultCatalogFacade.class, "stores", new StoreMultiValueMapConverter());
         xs.registerLocalConverter(
                 DefaultCatalogFacade.class, "namespaces", new SpaceMapConverter("namespace"));
         xs.registerLocalConverter(
@@ -538,6 +522,7 @@ public class XStreamPersister {
         xs.registerConverter(new VirtualTableConverter());
         xs.registerConverter(new KeywordInfoConverter());
         xs.registerConverter(new SettingsInfoConverter());
+        xs.registerConverter(new WMSLayerInfoConverter());
         // this should have been a metadata map too, but was not registered as such and got a plain
         // map converter. Switched to SettingsTolerantMapConverter to make it work when plugins get
         // removed and leave configuration that cannot be parsed anymore in there
@@ -569,9 +554,6 @@ public class XStreamPersister {
      * Use this method to register complex types that cannot be simply represented as a string in a
      * {@link BreifMapConverter}. The {@code typeId} will be used as a type discriminator in the
      * brief map, as well as the element root for the complex object to be converted.
-     *
-     * @param typeId
-     * @param clazz
      */
     public void registerBreifMapComplexType(String typeId, Class clazz) {
         forwardBreifMap.put(typeId, clazz);
@@ -654,12 +636,11 @@ public class XStreamPersister {
      *
      * @param obj The object to save.
      * @param out The stream to save the object to.
-     * @throws IOException
      */
     public void save(Object obj, OutputStream out) throws IOException {
         // unwrap dynamic proxies
-        obj = unwrapProxies(obj);
-        xs.toXML(obj, new OutputStreamWriter(out, "UTF-8"));
+        Object unwrapped = unwrapProxies(obj);
+        xs.toXML(unwrapped, new OutputStreamWriter(out, "UTF-8"));
     }
 
     /**
@@ -679,7 +660,6 @@ public class XStreamPersister {
      *
      * @param in The input stream to read the object from.
      * @param clazz The class of the expected object.
-     * @throws IOException
      */
     public <T> T load(InputStream in, Class<T> clazz) throws IOException {
         T obj = clazz.cast(xs.fromXML(in));
@@ -697,8 +677,6 @@ public class XStreamPersister {
     /**
      * Builds a converter that will marshal/unmarshal the target class by reference, that is, by
      * storing the object id as opposed to fully serializing it
-     *
-     * @param clazz
      */
     public ReferenceConverter buildReferenceConverter(Class clazz) {
         return new ReferenceConverter(clazz);
@@ -706,8 +684,6 @@ public class XStreamPersister {
 
     /**
      * Same as {@link #buildReferenceConverter(Class)}, but works against a collection of objects
-     *
-     * @param clazz
      */
     public ReferenceCollectionConverter buildReferenceCollectionConverter(Class clazz) {
         return new ReferenceCollectionConverter(clazz);
@@ -837,6 +813,7 @@ public class XStreamPersister {
         public void marshal(
                 Object source, HierarchicalStreamWriter writer, MarshallingContext context) {
 
+            @SuppressWarnings("unchecked")
             Set<String> encryptionFields = (Set<String>) context.get(ENCRYPTED_FIELDS_KEY);
             if (encryptionFields == null) {
                 encryptionFields = Collections.emptySet();
@@ -877,6 +854,7 @@ public class XStreamPersister {
         }
 
         @Override
+        @SuppressWarnings("unchecked")
         protected void populateMap(
                 HierarchicalStreamReader reader, UnmarshallingContext context, Map map) {
 
@@ -928,7 +906,7 @@ public class XStreamPersister {
                         reader.moveDown();
                     }
 
-                    value = readItem(reader, context, map);
+                    value = readBareItem(reader, context, map);
 
                     if (old) {
                         reader.moveUp();
@@ -942,7 +920,7 @@ public class XStreamPersister {
         }
 
         @Override
-        protected Object readItem(
+        protected Object readBareItem(
                 HierarchicalStreamReader reader, UnmarshallingContext context, Object current) {
             return reader.getValue();
         }
@@ -954,7 +932,7 @@ public class XStreamPersister {
         protected String getComplexTypeId(Class clazz) {
             String typeId = backwardBreifMap.get(clazz);
             if (typeId == null) {
-                List<Class> matches = new ArrayList<Class>();
+                List<Class<?>> matches = new ArrayList<>();
                 collectSuperclasses(clazz, matches);
                 for (Iterator it = matches.iterator(); it.hasNext(); ) {
                     Class sper = (Class) it.next();
@@ -964,9 +942,9 @@ public class XStreamPersister {
                 }
 
                 if (matches.size() > 1) {
-                    Comparator comparator =
-                            new Comparator<Class>() {
-                                public int compare(Class c1, Class c2) {
+                    Comparator<Class<?>> comparator =
+                            new Comparator<Class<?>>() {
+                                public int compare(Class<?> c1, Class<?> c2) {
                                     if (c2.isAssignableFrom(c1)) {
                                         return -1;
                                     } else {
@@ -986,7 +964,7 @@ public class XStreamPersister {
             return typeId;
         }
 
-        void collectSuperclasses(Class clazz, List<Class> matches) {
+        void collectSuperclasses(Class<?> clazz, List<Class<?>> matches) {
             matches.add(clazz);
             if (clazz.getSuperclass() == null && clazz.getInterfaces().length == 0) {
                 return;
@@ -995,7 +973,7 @@ public class XStreamPersister {
             if (clazz.getSuperclass() != null) {
                 collectSuperclasses(clazz.getSuperclass(), matches);
             }
-            for (Class iface : clazz.getInterfaces()) {
+            for (Class<?> iface : clazz.getInterfaces()) {
                 collectSuperclasses(iface, matches);
             }
         }
@@ -1038,6 +1016,7 @@ public class XStreamPersister {
             writer.endNode();
         }
 
+        @SuppressWarnings("unchecked")
         protected void putCurrentEntryIntoMap(
                 HierarchicalStreamReader reader,
                 UnmarshallingContext context,
@@ -1047,11 +1026,11 @@ public class XStreamPersister {
             Object value;
             try {
                 reader.moveDown();
-                key = readItem(reader, context, map);
+                key = readBareItem(reader, context, map);
                 reader.moveUp();
 
                 reader.moveDown();
-                value = readItem(reader, context, map);
+                value = readBareItem(reader, context, map);
             } catch (CannotResolveClassException e) {
                 LOGGER.log(
                         Level.WARNING,
@@ -1087,6 +1066,7 @@ public class XStreamPersister {
         }
 
         @Override
+        @SuppressWarnings("unchecked")
         public Object unmarshal(HierarchicalStreamReader reader, UnmarshallingContext context) {
             Map map = (Map) super.unmarshal(reader, context);
             if (!(map instanceof MetadataMap)) {
@@ -1107,6 +1087,7 @@ public class XStreamPersister {
             return Multimap.class.isAssignableFrom(clazz);
         }
 
+        @SuppressWarnings("unchecked")
         public void marshal(
                 Object value, HierarchicalStreamWriter writer, MarshallingContext context) {
             Multimap map = (Multimap) value;
@@ -1116,7 +1097,7 @@ public class XStreamPersister {
                     if (v != null) {
                         writer.startNode("entry");
                         writer.addAttribute("key", key.toString());
-                        writeItem(v, context, writer);
+                        writeCompleteItem(v, context, writer);
                         writer.endNode();
                     }
                 }
@@ -1132,7 +1113,7 @@ public class XStreamPersister {
                 // in this case we also support complex objects
                 while (reader.hasMoreChildren()) {
                     reader.moveDown();
-                    value = readItem(reader, context, map);
+                    value = readBareItem(reader, context, map);
                     reader.moveUp();
                 }
                 reader.moveUp();
@@ -1149,7 +1130,7 @@ public class XStreamPersister {
     /** Converters which encodes an object by a reference, or its id. */
     // class ReferenceConverter extends AbstractSingleValueConverter {
     class ReferenceConverter implements Converter {
-        Class clazz;
+        Class<?> clazz;
 
         public ReferenceConverter(Class clazz) {
             this.clazz = clazz;
@@ -1270,7 +1251,7 @@ public class XStreamPersister {
         }
 
         @Override
-        protected void writeItem(
+        protected void writeCompleteItem(
                 Object item, MarshallingContext context, HierarchicalStreamWriter writer) {
             ClassAliasingMapper cam =
                     (ClassAliasingMapper) mapper().lookupMapperOfType(ClassAliasingMapper.class);
@@ -1294,7 +1275,7 @@ public class XStreamPersister {
                                 "Unexpected item "
                                         + item
                                         + " whose type is not among: "
-                                        + subclasses);
+                                        + Arrays.toString(subclasses));
                     }
                     String typeName = cam.serializedClass(theClass);
                     writer.addAttribute("type", typeName);
@@ -1326,7 +1307,7 @@ public class XStreamPersister {
         }
 
         @Override
-        protected Object readItem(
+        protected Object readBareItem(
                 HierarchicalStreamReader reader, UnmarshallingContext context, Object current) {
             Class theClass = clazz;
             if (subclasses != null) {
@@ -1346,10 +1327,10 @@ public class XStreamPersister {
         }
 
         @Override
-        protected void writeItem(
+        protected void writeCompleteItem(
                 Object item, MarshallingContext context, HierarchicalStreamWriter writer) {
 
-            super.writeItem(unwrapProxies(item), context, writer);
+            super.writeCompleteItem(unwrapProxies(item), context, writer);
         }
     }
 
@@ -1546,7 +1527,7 @@ public class XStreamPersister {
             }
 
             GridGeometry2D gg = new GridGeometry2D(gridRange, gridToCRS, crs);
-            return serializationMethodInvoker.callReadResolve(gg);
+            return serializationMembers.callReadResolve(gg);
         }
 
         int[] toIntArray(String s) {
@@ -1618,7 +1599,7 @@ public class XStreamPersister {
     // catalog object converters
     /** Base class for all custom reflection based converters. */
     protected class AbstractReflectionConverter extends ReflectionConverter {
-        Class clazz;
+        Class<?> clazz;
 
         public AbstractReflectionConverter() {
             this(Object.class);
@@ -1679,6 +1660,7 @@ public class XStreamPersister {
             super(clazz);
         }
 
+        @SuppressWarnings("unchecked")
         private <T> void unsafeCopy(Object source, Object target, Class<T> clazz) {
             OwsUtils.copy((T) source, (T) target, clazz);
         }
@@ -1692,7 +1674,7 @@ public class XStreamPersister {
             Object catalogObject = callback.getCatalogObject();
 
             if (catalogObject != null) {
-                Class i = callback.getObjectClass();
+                Class<?> i = callback.getObjectClass();
 
                 if (i != null) {
                     unsafeCopy(catalogObject, emptyObject, i);
@@ -1827,14 +1809,14 @@ public class XStreamPersister {
     }
 
     /** Converter for multi hash maps containing coverage stores and data stores. */
-    static class StoreMultiHashMapConverter implements Converter {
+    static class StoreMultiValueMapConverter implements Converter {
         public boolean canConvert(Class type) {
-            return MultiHashMap.class.equals(type);
+            return MultiValuedMap.class.equals(type);
         }
 
         public void marshal(
                 Object source, HierarchicalStreamWriter writer, MarshallingContext context) {
-            MultiHashMap map = (MultiHashMap) source;
+            MultiValuedMap map = (MultiValuedMap) source;
             for (Object v : map.values()) {
                 if (v instanceof DataStoreInfo) {
                     writer.startNode("dataStore");
@@ -1850,7 +1832,7 @@ public class XStreamPersister {
         }
 
         public Object unmarshal(HierarchicalStreamReader reader, UnmarshallingContext context) {
-            MultiHashMap map = new MultiHashMap();
+            MultiValuedMap<Class, Object> map = new HashSetValuedHashMap<>();
 
             while (reader.hasMoreChildren()) {
                 reader.moveDown();
@@ -1904,7 +1886,7 @@ public class XStreamPersister {
         }
 
         public Object unmarshal(HierarchicalStreamReader reader, UnmarshallingContext context) {
-            Map map = new HashMap();
+            Map<String, CatalogInfo> map = new HashMap<>();
 
             while (reader.hasMoreChildren()) {
                 reader.moveDown();
@@ -1971,10 +1953,10 @@ public class XStreamPersister {
 
             // ensure null list does not result
             if (featureType.getAttributes() == null) {
-                featureType.setAttributes(new ArrayList());
+                featureType.setAttributes(new ArrayList<>());
             }
             if (featureType.getResponseSRS() == null) {
-                featureType.setResponseSRS(new ArrayList());
+                featureType.setResponseSRS(new ArrayList<>());
             }
             if (featureType.getMetadata() == null) {
                 featureType.setMetadata(new MetadataMap());
@@ -2256,7 +2238,7 @@ public class XStreamPersister {
             List<String> primaryKeys = new ArrayList<String>();
             List<VirtualTableParameter> params = new ArrayList<VirtualTableParameter>();
             List<String> geomNames = new ArrayList<String>();
-            List<Class> types = new ArrayList<Class>();
+            List<Class<? extends Geometry>> types = new ArrayList<>();
             List<Integer> srids = new ArrayList<Integer>();
 
             Boolean escapeSql = false;
@@ -2266,7 +2248,7 @@ public class XStreamPersister {
                     primaryKeys.add(reader.getValue());
                 } else if (reader.getNodeName().equals("geometry")) {
                     String geomName = null;
-                    Class type = null;
+                    Class<? extends Geometry> type = null;
                     int srid = -1;
                     while (reader.hasMoreChildren()) {
                         reader.moveDown();
@@ -2420,15 +2402,15 @@ public class XStreamPersister {
         }
 
         @Override
-        protected Object readItem(
+        protected Object readBareItem(
                 HierarchicalStreamReader reader, UnmarshallingContext context, Object current) {
             return context.convertAnother(current, Keyword.class);
         }
 
         @Override
-        protected void writeItem(
+        protected void writeCompleteItem(
                 Object item, MarshallingContext context, HierarchicalStreamWriter writer) {
-            ExtendedHierarchicalStreamWriterHelper.startNode(writer, "string", Keyword.class);
+            writer.startNode("string");
             context.convertAnother(item);
             writer.endNode();
         }
@@ -2486,6 +2468,7 @@ public class XStreamPersister {
         }
 
         @Override
+        @SuppressWarnings("unchecked")
         protected Object instantiateNewInstance(
                 HierarchicalStreamReader reader, UnmarshallingContext context) {
             Object emptyObject = super.instantiateNewInstance(reader, context);
@@ -2542,6 +2525,32 @@ public class XStreamPersister {
                 }
             }
             return obj.toString();
+        }
+    }
+
+    /**
+     * Converter for WMSLayerInfoImpl class ensure backwards compatibility with <= 2.16.2 data
+     * directories
+     */
+    class WMSLayerInfoConverter extends AbstractCatalogInfoConverter {
+
+        public WMSLayerInfoConverter() {
+            super(WMSLayerInfoImpl.class);
+        }
+
+        public Object doUnmarshal(
+                Object result, HierarchicalStreamReader reader, UnmarshallingContext context) {
+            WMSLayerInfoImpl obj = (WMSLayerInfoImpl) super.doUnmarshal(result, reader, context);
+            // setting the minimal defaults and clean object with no NULL values
+            if (obj.getPreferredFormat() == null) {
+                obj.setPreferredFormat(WMSLayerInfoImpl.DEFAULT_FORMAT);
+                obj.setSelectedRemoteFormats(new ArrayList<String>());
+            }
+            if (obj.getForcedRemoteStyle() == null) {
+                obj.setForcedRemoteStyle(WMSLayerInfoImpl.DEFAULT_ON_REMOTE.getName());
+                obj.setSelectedRemoteStyles(new ArrayList<String>());
+            }
+            return obj;
         }
     }
 }

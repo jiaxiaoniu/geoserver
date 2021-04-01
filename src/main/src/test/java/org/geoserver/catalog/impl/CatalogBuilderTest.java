@@ -8,7 +8,13 @@ package org.geoserver.catalog.impl;
 import static org.easymock.EasyMock.createMock;
 import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.replay;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
@@ -18,7 +24,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import javax.media.jai.ImageLayout;
-import org.easymock.classextension.EasyMock;
+import org.easymock.EasyMock;
 import org.geoserver.catalog.Catalog;
 import org.geoserver.catalog.CatalogBuilder;
 import org.geoserver.catalog.CoverageDimensionInfo;
@@ -50,7 +56,6 @@ import org.geotools.coverage.grid.io.AbstractGridFormat;
 import org.geotools.data.FeatureSource;
 import org.geotools.data.Query;
 import org.geotools.data.ResourceInfo;
-import org.geotools.factory.Hints;
 import org.geotools.feature.NameImpl;
 import org.geotools.geometry.GeneralEnvelope;
 import org.geotools.geometry.jts.ReferencedEnvelope;
@@ -60,6 +65,7 @@ import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.geotools.referencing.operation.builder.GridToEnvelopeMapper;
 import org.geotools.referencing.operation.projection.MapProjection;
 import org.geotools.referencing.operation.transform.AffineTransform2D;
+import org.geotools.util.factory.Hints;
 import org.junit.Test;
 import org.locationtech.jts.geom.Point;
 import org.opengis.feature.type.FeatureType;
@@ -148,6 +154,22 @@ public class CatalogBuilderTest extends GeoServerMockTestSupport {
 
         fti.setProjectionPolicy(ProjectionPolicy.REPROJECT_TO_DECLARED);
         assertEquals(new ReferencedEnvelope(CRS.getEnvelope(crs4326)), crsBounds);
+    }
+
+    @Test
+    public void testFindNativeCRS() throws Exception {
+        Catalog cat = getCatalog();
+        CatalogBuilder cb = new CatalogBuilder(cat);
+        cb.setStore(cat.getDataStoreByName(MockData.LINES.getPrefix()));
+        FeatureTypeInfo fti = cb.buildFeatureType(toName(MockData.LINES));
+        CoordinateReferenceSystem resourceCRS = fti.getCRS();
+        assertNotNull(resourceCRS);
+        // make sure the srs is as expected, otherwise the rest of the tests don't make sense
+        assertEquals("EPSG:32615", fti.getSRS());
+        // change SRS of Resource
+        fti.setNativeCRS(CRS.decode("EPSG:26713"));
+        // catalog builder should return origin "EPSG:32615"
+        assertEquals(CRS.lookupEpsgCode(cb.getNativeCRS(fti), false), Integer.valueOf(32615));
     }
 
     @Test
@@ -253,6 +275,20 @@ public class CatalogBuilderTest extends GeoServerMockTestSupport {
         cinfo.setNativeCRS(testCRS);
         cb.initCoverage(cinfo, "srs lookup");
         assertEquals("EPSG:4230", cinfo.getSRS());
+    }
+
+    @Test
+    public void testCoverageNativeSRSLookup() throws Exception {
+        Catalog cat = getCatalog();
+
+        CatalogBuilder cb = new CatalogBuilder(cat);
+        cb.setStore(cat.getCoverageStoreByName(MockData.WORLD.getLocalPart()));
+        CoverageInfo cinfo = cb.buildCoverage();
+        // change SRS of Resource to random
+        cinfo.setNativeCRS(CRS.decode("EPSG:26713"));
+        cinfo.setSRS("EPSG:26713");
+        // catalog builder should return origin "EPSG:4236"
+        assertEquals(CRS.lookupEpsgCode(cb.getNativeCRS(cinfo), false), Integer.valueOf(4326));
     }
 
     @Test
@@ -370,6 +406,7 @@ public class CatalogBuilderTest extends GeoServerMockTestSupport {
         assertEquals(fti.getNativeBoundingBox(), group.getBounds());
     }
 
+    @Test
     public void testLayerGroupEoBounds() throws Exception {
         Catalog cat = getCatalog();
 
@@ -386,6 +423,7 @@ public class CatalogBuilderTest extends GeoServerMockTestSupport {
         layer.setType(PublishedType.VECTOR);
 
         LayerGroupInfo group = cat.getFactory().createLayerGroup();
+        group.setMode(LayerGroupInfo.Mode.EO);
         group.setName("group_EO");
         group.setRootLayer(layer);
 
@@ -515,6 +553,7 @@ public class CatalogBuilderTest extends GeoServerMockTestSupport {
         assertTrue(ftInfo.getKeywords().contains(new Keyword("baz")));
     }
 
+    @Test
     public void testSetupMetadataResourceInfoException() throws Exception {
         FeatureTypeInfo ftInfo = createMock(FeatureTypeInfo.class);
         expect(ftInfo.getTitle()).andReturn("foo");
@@ -559,7 +598,7 @@ public class CatalogBuilderTest extends GeoServerMockTestSupport {
             store.setCapabilitiesURL(capsURL.toExternalForm());
             cb.setStore(store);
             WMSLayerInfo layer = cb.buildWMSLayer("world4326");
-
+            layer.reset();
             // check the bbox has the proper axis order
             assertEquals("EPSG:4326", layer.getSRS());
             ReferencedEnvelope bbox = layer.getLatLonBoundingBox();
@@ -567,6 +606,15 @@ public class CatalogBuilderTest extends GeoServerMockTestSupport {
             assertEquals(-90, bbox.getMinY(), 0d);
             assertEquals(180, bbox.getMaxX(), 0d);
             assertEquals(90, bbox.getMaxY(), 0d);
+            assertTrue(!layer.availableFormats().isEmpty());
+            assertTrue(layer.getStyles().isEmpty());
+            assertTrue(layer.getDefaultStyle().getName().isEmpty());
+
+            // change SRS of Resource
+            layer.setNativeCRS(CRS.decode("EPSG:26713"));
+            // catalog builder should return origin "EPSG:4326"
+            assertEquals(CRS.lookupEpsgCode(cb.getNativeCRS(layer), false), Integer.valueOf(4326));
+
         } finally {
             TestHttpClientProvider.endTest();
         }
@@ -597,6 +645,14 @@ public class CatalogBuilderTest extends GeoServerMockTestSupport {
             assertEquals(-90, bbox.getMinY(), 0d);
             assertEquals(180, bbox.getMaxX(), 0d);
             assertEquals(90, bbox.getMaxY(), 0d);
+            assertTrue(!layer.availableFormats().isEmpty());
+            assertTrue(layer.getStyles().isEmpty());
+            assertTrue(layer.getDefaultStyle().getName().isEmpty());
+
+            // change SRS of Resource
+            layer.setNativeCRS(CRS.decode("EPSG:26713"));
+            // catalog builder should return origin "EPSG:4326"
+            assertEquals(CRS.lookupEpsgCode(cb.getNativeCRS(layer), false), Integer.valueOf(4326));
         } finally {
             TestHttpClientProvider.endTest();
         }
@@ -627,6 +683,9 @@ public class CatalogBuilderTest extends GeoServerMockTestSupport {
             assertEquals(-90, bbox.getMinY(), 0d);
             assertEquals(180, bbox.getMaxX(), 0d);
             assertEquals(90, bbox.getMaxY(), 0d);
+            assertTrue(!layer.availableFormats().isEmpty());
+            assertTrue(layer.getStyles().isEmpty());
+            assertTrue(layer.getDefaultStyle().getName().isEmpty());
         } finally {
             TestHttpClientProvider.endTest();
         }

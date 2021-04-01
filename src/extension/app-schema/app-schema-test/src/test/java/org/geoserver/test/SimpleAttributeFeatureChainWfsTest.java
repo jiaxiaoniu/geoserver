@@ -13,16 +13,16 @@ import static org.junit.Assume.assumeTrue;
 
 import java.io.IOException;
 import org.geoserver.catalog.FeatureTypeInfo;
+import org.geotools.appschema.filter.FilterFactoryImplNamespaceAware;
+import org.geotools.appschema.jdbc.NestedFilterToSQL;
 import org.geotools.data.FeatureSource;
 import org.geotools.data.complex.AppSchemaDataAccess;
 import org.geotools.data.complex.AppSchemaDataAccessRegistry;
 import org.geotools.data.complex.FeatureTypeMapping;
 import org.geotools.data.complex.filter.ComplexFilterSplitter;
 import org.geotools.data.jdbc.FilterToSQLException;
-import org.geotools.filter.FilterFactoryImplNamespaceAware;
+import org.geotools.data.util.NullProgressListener;
 import org.geotools.jdbc.JDBCDataStore;
-import org.geotools.jdbc.NestedFilterToSQL;
-import org.geotools.util.NullProgressListener;
 import org.junit.Test;
 import org.opengis.filter.Filter;
 import org.opengis.filter.Or;
@@ -535,14 +535,14 @@ public class SimpleAttributeFeatureChainWfsTest extends AbstractAppSchemaTestSup
         //            "appschematest"."MAPPEDFEATUREWITHNESTEDNAME"."ID" = "chain_link_1"."MF_ID"))
         assertTrue(encodedCombined.matches("^\\(.*GUNTHORPE FORMATION.*OR.*EXISTS.*\\)$"));
         assertContainsFeatures(fs.getFeatures(combined), "mf1", "mf3");
-        // test UNION improvement on
+        // test UNION improvement off
         AppSchemaDataAccessRegistry.getAppSchemaProperties()
-                .setProperty("app-schema.orUnionReplace", "true");
+                .setProperty("app-schema.orUnionReplace", "false");
         try {
             assertContainsFeatures(fs.getFeatures(combined), "mf1", "mf3");
         } finally {
             AppSchemaDataAccessRegistry.getAppSchemaProperties()
-                    .setProperty("app-schema.orUnionReplace", "false");
+                    .setProperty("app-schema.orUnionReplace", "true");
         }
 
         /*
@@ -593,16 +593,16 @@ public class SimpleAttributeFeatureChainWfsTest extends AbstractAppSchemaTestSup
         Or combined = ff.or(regularFilter, nestedFilter);
 
         assertContainsFeatures(fs.getFeatures(combined), "mf2", "mf3");
-        // set improvement to on
+        // set improvement to off
         AppSchemaDataAccessRegistry.getAppSchemaProperties()
-                .setProperty("app-schema.orUnionReplace", "true");
+                .setProperty("app-schema.orUnionReplace", "false");
         try {
             FeatureTypeInfo ftInfo1 = getCatalog().getFeatureTypeByName("gsml", "MappedFeature");
             FeatureSource fs1 = ftInfo.getFeatureSource(new NullProgressListener(), null);
             assertContainsFeatures(fs1.getFeatures(combined), "mf2", "mf3");
         } finally {
             AppSchemaDataAccessRegistry.getAppSchemaProperties()
-                    .setProperty("app-schema.orUnionReplace", "false");
+                    .setProperty("app-schema.orUnionReplace", "true");
         }
     }
 

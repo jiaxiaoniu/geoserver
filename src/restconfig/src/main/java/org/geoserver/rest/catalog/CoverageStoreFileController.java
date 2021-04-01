@@ -4,9 +4,9 @@
  */
 package org.geoserver.rest.catalog;
 
-import java.awt.*;
-import java.io.File;
+import java.awt.RenderingHints;
 import java.io.IOException;
+import java.io.Serializable;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -22,22 +22,21 @@ import org.geoserver.catalog.CoverageStoreInfo;
 import org.geoserver.catalog.LayerInfo;
 import org.geoserver.catalog.SingleGridCoverage2DReader;
 import org.geoserver.data.util.CoverageStoreUtils;
-import org.geoserver.platform.GeoServerExtensions;
-import org.geoserver.platform.resource.Paths;
 import org.geoserver.platform.resource.Resource;
 import org.geoserver.platform.resource.Resource.Type;
 import org.geoserver.platform.resource.Resources;
 import org.geoserver.rest.ResourceNotFoundException;
 import org.geoserver.rest.RestBaseController;
 import org.geoserver.rest.RestException;
-import org.geoserver.rest.util.RESTUploadPathMapper;
+import org.geoserver.rest.util.IOUtils;
+import org.geoserver.rest.util.RESTUtils;
 import org.geoserver.rest.wrapper.RestWrapper;
 import org.geotools.coverage.grid.io.AbstractGridFormat;
 import org.geotools.coverage.grid.io.GridCoverage2DReader;
 import org.geotools.coverage.grid.io.StructuredGridCoverage2DReader;
-import org.geotools.factory.GeoTools;
-import org.geotools.factory.Hints;
 import org.geotools.util.URLs;
+import org.geotools.util.factory.GeoTools;
+import org.geotools.util.factory.Hints;
 import org.opengis.coverage.grid.Format;
 import org.opengis.coverage.grid.GridCoverageReader;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -85,9 +84,11 @@ public class CoverageStoreFileController extends AbstractStoreUploadController {
             @PathVariable UploadMethod method,
             @PathVariable String format,
             @RequestParam(required = false) String filename,
+            @RequestParam(name = "updateBBox", required = false) Boolean updateBBox,
             HttpServletRequest request)
             throws IOException {
 
+        if (updateBBox == null) updateBBox = false;
         // check the coverage store exists
         CoverageStoreInfo info = catalog.getCoverageStoreByName(workspaceName, storeName);
         if (info == null) {
@@ -110,14 +111,20 @@ public class CoverageStoreFileController extends AbstractStoreUploadController {
         }
 
         StructuredGridCoverage2DReader sr = (StructuredGridCoverage2DReader) reader;
-        // This method returns a List of the harvested files.
-        final List<File> uploadedFiles = new ArrayList<>();
-        for (Resource res :
-                doFileUpload(method, workspaceName, storeName, filename, format, request)) {
-            uploadedFiles.add(Resources.find(res));
+        // This method returns a List of the harvested sources.
+        final List<Object> harvestedResources = new ArrayList<>();
+        if (method == UploadMethod.remote) {
+            harvestedResources.add(handleRemoteUrl(request));
+
+        } else {
+            for (Resource res :
+                    doFileUpload(method, workspaceName, storeName, filename, format, request)) {
+                harvestedResources.add(Resources.find(res));
+            }
         }
         // File Harvesting
-        sr.harvest(null, uploadedFiles, GeoTools.getDefaultHints());
+        sr.harvest(null, harvestedResources, GeoTools.getDefaultHints());
+        if (updateBBox) new MosaicInfoBBoxHandler(catalog).updateNativeBBox(info, sr);
     }
 
     @PutMapping(produces = {MediaType.APPLICATION_XML_VALUE, MediaType.APPLICATION_JSON_VALUE})
@@ -242,7 +249,7 @@ public class CoverageStoreFileController extends AbstractStoreUploadController {
             }
 
             // coverage read params
-            final Map customParameters = new HashMap();
+            final Map<String, Serializable> customParameters = new HashMap<>();
             if (useJaiImageRead != null) {
                 customParameters.put(
                         AbstractGridFormat.USE_JAI_IMAGEREAD.getName().toString(), useJaiImageRead);
@@ -318,7 +325,7 @@ public class CoverageStoreFileController extends AbstractStoreUploadController {
             String nativeName,
             String coverageName,
             GridCoverage2DReader reader,
-            final Map customParameters)
+            final Map<String, Serializable> customParameters)
             throws Exception {
         CoverageInfo cinfo = builder.buildCoverage(reader, customParameters);
 
@@ -423,7 +430,6 @@ public class CoverageStoreFileController extends AbstractStoreUploadController {
      *     on server)
      * @param storeName The name of the store being added
      * @param format The store format.
-     * @throws IOException
      */
     protected List<Resource> doFileUpload(
             UploadMethod method,
@@ -443,51 +449,29 @@ public class CoverageStoreFileController extends AbstractStoreUploadController {
             // Mapping of the input directory
             if (method == UploadMethod.url) {
                 // For URL upload method, workspace and StoreName are not considered
-                directory = createFinalRoot(null, null, postRequest);
+                directory = RESTUtils.createUploadRoot(catalog, null, null, postRequest);
             } else {
-                directory = createFinalRoot(workspaceName, storeName, postRequest);
+                directory =
+                        RESTUtils.createUploadRoot(catalog, workspaceName, storeName, postRequest);
             }
         }
         return handleFileUpload(
                 storeName, workspaceName, filename, method, format, directory, request);
     }
 
-    private Resource createFinalRoot(String workspaceName, String storeName, boolean isPost)
-            throws IOException {
-        // Check if the Request is a POST request, in order to search for an existing coverage
-        Resource directory = null;
-        if (isPost && storeName != null) {
-            // Check if the coverage already exists
-            CoverageStoreInfo coverage = catalog.getCoverageStoreByName(storeName);
-            if (coverage != null) {
-                if (workspaceName == null
-                        || coverage.getWorkspace().getName().equalsIgnoreCase(workspaceName)) {
-                    // If the coverage exists then the associated directory is defined by its URL
-                    directory =
-                            Resources.fromPath(
-                                    URLs.urlToFile(new URL(coverage.getURL())).getPath(),
-                                    catalog.getResourceLoader().get(""));
-                }
-            }
-        }
-        // If the directory has not been found then it is created directly
-        if (directory == null) {
-            directory =
-                    catalog.getResourceLoader().get(Paths.path("data", workspaceName, storeName));
-        }
+    /** Return the remote URL provided in the request. */
+    protected URL handleRemoteUrl(HttpServletRequest request) {
 
-        // Selection of the original ROOT directory path
-        StringBuilder root = new StringBuilder(directory.path());
-        // StoreParams to use for the mapping.
-        Map<String, String> storeParams = new HashMap<>();
-        // Listing of the available pathMappers
-        List<RESTUploadPathMapper> mappers =
-                GeoServerExtensions.extensions(RESTUploadPathMapper.class);
-        // Mapping of the root directory
-        for (RESTUploadPathMapper mapper : mappers) {
-            mapper.mapStorePath(root, workspaceName, storeName, storeParams);
+        try {
+            // get the URL to be harvested
+            final String stringURL = IOUtils.toString(request.getReader());
+            URL remoteUrl = new URL(stringURL);
+            return remoteUrl;
+        } catch (RestException re) {
+            throw re;
+        } catch (Throwable t) {
+            throw new RestException(
+                    "Error while retrieving the remote URL:", HttpStatus.INTERNAL_SERVER_ERROR, t);
         }
-        directory = Resources.fromPath(root.toString());
-        return directory;
     }
 }

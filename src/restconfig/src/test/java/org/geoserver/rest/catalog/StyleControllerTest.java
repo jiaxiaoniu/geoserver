@@ -8,24 +8,43 @@ import static org.custommonkey.xmlunit.XMLAssert.assertXpathEvaluatesTo;
 import static org.custommonkey.xmlunit.XMLAssert.assertXpathExists;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.endsWith;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.StringWriter;
 import java.net.URL;
+import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 import net.sf.json.JSON;
+import net.sf.json.JSONArray;
 import net.sf.json.JSONObject;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.custommonkey.xmlunit.XMLUnit;
 import org.custommonkey.xmlunit.XpathEngine;
-import org.geoserver.catalog.*;
+import org.geoserver.catalog.Catalog;
+import org.geoserver.catalog.CatalogFacade;
+import org.geoserver.catalog.LayerInfo;
+import org.geoserver.catalog.MetadataMap;
+import org.geoserver.catalog.PropertyStyleHandler;
+import org.geoserver.catalog.SLDHandler;
+import org.geoserver.catalog.StyleInfo;
+import org.geoserver.catalog.Styles;
 import org.geoserver.data.test.SystemTestData;
 import org.geoserver.data.test.TestData;
 import org.geoserver.platform.GeoServerResourceLoader;
 import org.geoserver.platform.resource.Resource;
+import org.geoserver.platform.resource.Resources;
 import org.geoserver.rest.RestBaseController;
 import org.geotools.styling.Style;
 import org.geotools.util.URLs;
@@ -347,6 +366,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         assertTrue(response.getHeader("Location").endsWith("/workspaces/gs/styles/foo"));
 
         assertNotNull(catalog.getStyleByName("gs", "foo"));
+        assertNotNull(catalog.getStyleByName("gs", "foo").getDateCreated());
 
         GeoServerResourceLoader rl = getResourceLoader();
         assertNotNull(rl.find("workspaces", "gs", "styles", "foo.sld"));
@@ -369,6 +389,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         assertTrue(response.getHeader("Location").endsWith("/workspaces/gs/styles/foo"));
 
         assertNotNull(catalog.getStyleByName("gs", "foo"));
+        assertNotNull(catalog.getStyleByName("gs", "foo").getDateCreated());
 
         GeoServerResourceLoader rl = getResourceLoader();
         assertNotNull(rl.find("workspaces", "gs", "styles", "foo.sld"));
@@ -393,6 +414,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         assertTrue(response.getHeader("Location").endsWith("/styles/bar"));
 
         assertNotNull(catalog.getStyleByName("bar"));
+        assertNotNull(catalog.getStyleByName("bar").getDateCreated());
     }
 
     @Test
@@ -427,6 +449,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         assertEquals(201, response.getStatus());
         assertThat(response.getContentType(), CoreMatchers.startsWith(MediaType.TEXT_PLAIN_VALUE));
         assertNotNull(cat.getStyleByName("gs", "foo"));
+        assertNotNull(cat.getStyleByName("gs", "foo").getDateCreated());
     }
 
     @Test
@@ -444,6 +467,112 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
 
         style = catalog.getStyleByName("Ponds");
         assertEquals("Forests.sld", style.getFilename());
+        assertNotNull(style.getDateModified());
+    }
+
+    /** Test for getting style with metadataMap value via Rest GET, XML format. */
+    @Test
+    public void testGetWithMetadataAsXML() throws Exception {
+        StyleInfo style = catalog.getStyleByName("Ponds");
+        style.getMetadata().put("cacheAgeMax", "300");
+        catalog.save(style);
+        Document dom = getAsDOM(RestBaseController.ROOT_PATH + "/styles/Ponds.xml");
+
+        assertEquals("style", dom.getDocumentElement().getNodeName());
+        assertXpathEvaluatesTo("Ponds", "/style/name", dom);
+        assertXpathEvaluatesTo("Ponds.sld", "/style/filename", dom);
+        assertXpathEvaluatesTo("300", "/style/metadata/entry[@key='cacheAgeMax']", dom);
+    }
+
+    /** Test for getting style with metadataMap value via Rest GET, JSON format. */
+    @Test
+    public void testGetWithMetadataAsJSON() throws Exception {
+        StyleInfo style = catalog.getStyleByName("Ponds");
+        style.getMetadata().put("cacheAgeMax", "300");
+        style.getMetadata().put("surename", "test1");
+        catalog.save(style);
+        JSON json = getAsJSON(RestBaseController.ROOT_PATH + "/styles/Ponds.json");
+
+        JSONObject styleJson = ((JSONObject) json).getJSONObject("style");
+        assertEquals("Ponds", styleJson.get("name"));
+        assertEquals("Ponds.sld", styleJson.get("filename"));
+        @SuppressWarnings("unchecked")
+        Collection<JSONObject> entryCollection =
+                JSONArray.toCollection(
+                        styleJson.getJSONObject("metadata").getJSONArray("entry"),
+                        JSONObject.class);
+        assertTrue(
+                entryCollection
+                        .stream()
+                        .anyMatch(
+                                j ->
+                                        "cacheAgeMax".equals(j.getString("@key"))
+                                                && "300".equals(j.getString("$"))));
+        assertTrue(
+                entryCollection
+                        .stream()
+                        .anyMatch(
+                                j ->
+                                        "surename".equals(j.getString("@key"))
+                                                && "test1".equals(j.getString("$"))));
+    }
+
+    /** Checks saving an style with metadataMap value via Rest PUT. */
+    @Test
+    public void testPutWithMetadata() throws Exception {
+        StyleInfo style = catalog.getStyleByName("Ponds");
+        assertEquals("Ponds.sld", style.getFilename());
+
+        String xml =
+                "<style>"
+                        + "<name>Ponds</name>"
+                        + "<filename>Forests.sld</filename>"
+                        + "<metadata> <entry key=\"cacheAgeMax\">300</entry> </metadata>"
+                        + "</style>";
+
+        MockHttpServletResponse response =
+                putAsServletResponse(
+                        RestBaseController.ROOT_PATH + "/styles/Ponds", xml.getBytes(), "text/xml");
+        assertEquals(200, response.getStatus());
+
+        style = catalog.getStyleByName("Ponds");
+        assertEquals("Forests.sld", style.getFilename());
+        MetadataMap metadata = style.getMetadata();
+        assertNotNull(metadata);
+        assertTrue(metadata.size() == 1);
+        assertEquals("300", metadata.get("cacheAgeMax"));
+        assertNotNull(style.getDateModified());
+    }
+
+    /** Checks saving an style with metadataMap value via Rest PUT using JSON format. */
+    @Test
+    public void testPutJSONWithMetadata() throws Exception {
+        StyleInfo style = catalog.getStyleByName("Ponds");
+        assertEquals("Ponds.sld", style.getFilename());
+
+        String json =
+                "{\"style\": {\"name\":\"Ponds\",\"format\":\"sld\",\"languageVersion\":{\"version\":\"1.0.0\"},"
+                        + "\"filename\":\"Ponds.sld\","
+                        + "\"metadata\":{"
+                        + "\"entry\":[{\"@key\":\"cacheAgeMax\",\"$\":\"300\"}"
+                        + ",{\"@key\":\"surename\",\"$\":\"test1\"}]}}"
+                        + "}";
+
+        MockHttpServletResponse response =
+                putAsServletResponse(
+                        RestBaseController.ROOT_PATH + "/styles/Ponds.json",
+                        json.getBytes(),
+                        "application/json");
+        assertEquals(200, response.getStatus());
+
+        style = catalog.getStyleByName("Ponds");
+        assertEquals("Ponds.sld", style.getFilename());
+        MetadataMap metadata = style.getMetadata();
+        assertNotNull(metadata);
+        assertTrue(metadata.size() == 2);
+        assertEquals("300", metadata.get("cacheAgeMax"));
+        assertEquals("test1", metadata.get("surename"));
+        assertNotNull(style.getDateModified());
     }
 
     @Test
@@ -506,6 +635,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         // now it should have been "upgraded" to 1.1
         StyleInfo infoAfter = catalog.getStyleByName("Ponds");
         assertThat(infoAfter.getFormatVersion(), equalTo(SLDHandler.VERSION_11));
+        assertNotNull(infoAfter.getDateModified());
     }
 
     @Test
@@ -527,6 +657,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         // now it should have been modified back to 1.0
         StyleInfo infoAfter = catalog.getStyleByName("Ponds");
         assertThat(infoAfter.getFormatVersion(), equalTo(SLDHandler.VERSION_10));
+        assertNotNull(infoAfter.getDateModified());
     }
 
     @Test
@@ -608,6 +739,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
                         "application/xml");
         assertEquals(200, response.getStatus());
         assertEquals("bar.sld", cat.getStyleByName("gs", "foo").getFilename());
+        assertNotNull(cat.getStyleByName("gs", "foo").getDateModified());
     }
 
     @Test
@@ -621,7 +753,28 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
                         RestBaseController.ROOT_PATH + "/workspaces/gs/styles/foo",
                         xml,
                         "application/xml");
-        assertEquals(403, response.getStatus());
+        assertEquals(200, response.getStatus());
+        assertNotNull("cite", getCatalog().getStyleByName("cite", "foo"));
+        assertNotNull("cite", getCatalog().getStyleByName("cite", "foo").getWorkspace());
+        assertEquals("cite", getCatalog().getStyleByName("cite", "foo").getWorkspace().getName());
+        assertNotNull(getCatalog().getStyleByName("cite", "foo").getDateModified());
+    }
+
+    @Test
+    public void testPutToWorkspaceChangeWorkspaceBackToGlobal() throws Exception {
+        testPostToWorkspace();
+
+        String xml = "<style>" + "<workspace></workspace>" + "</style>";
+
+        MockHttpServletResponse response =
+                putAsServletResponse(
+                        RestBaseController.ROOT_PATH + "/workspaces/gs/styles/foo",
+                        xml,
+                        "application/xml");
+        assertEquals(200, response.getStatus());
+        assertNotNull("no workspace", getCatalog().getStyleByName("foo"));
+        assertNull("no workspace", getCatalog().getStyleByName("foo").getWorkspace());
+        assertNotNull(getCatalog().getStyleByName("foo").getDateModified());
     }
 
     @Test
@@ -663,6 +816,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         assertEquals(200, response.getStatus());
 
         assertNotNull(catalog.getStyleByName("Ponds"));
+        assertNotNull(catalog.getStyleByName("Ponds").getDateModified());
     }
 
     @Test
@@ -769,14 +923,18 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         assertNotNull(catalog.getStyleByName("foo"));
 
         // ensure the style not deleted on disk
-        assertTrue(new File(getDataDirectory().findStyleDir(), "foo.sld").exists());
+        assertTrue(
+                new File(Resources.directory(getDataDirectory().getStyles()), "foo.sld").exists());
 
         response = deleteAsServletResponse(RestBaseController.ROOT_PATH + "/styles/foo");
         assertEquals(200, response.getStatus());
 
         // ensure the style deleted on disk but backed up
-        assertFalse(new File(getDataDirectory().findStyleDir(), "foo.sld").exists());
-        assertTrue(new File(getDataDirectory().findStyleDir(), "foo.sld.bak").exists());
+        assertFalse(
+                new File(Resources.directory(getDataDirectory().getStyles()), "foo.sld").exists());
+        assertTrue(
+                new File(Resources.directory(getDataDirectory().getStyles()), "foo.sld.bak")
+                        .exists());
     }
 
     @Test
@@ -789,13 +947,15 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         assertNotNull(catalog.getStyleByName("foo"));
 
         // ensure the style not deleted on disk
-        assertTrue(new File(getDataDirectory().findStyleDir(), "foo.sld").exists());
+        assertTrue(
+                new File(Resources.directory(getDataDirectory().getStyles()), "foo.sld").exists());
 
         response = deleteAsServletResponse(RestBaseController.ROOT_PATH + "/styles/foo?purge=true");
         assertEquals(200, response.getStatus());
 
         // ensure the style not deleted on disk
-        assertFalse(new File(getDataDirectory().findStyleDir(), "foo.sld").exists());
+        assertFalse(
+                new File(Resources.directory(getDataDirectory().getStyles()), "foo.sld").exists());
     }
 
     @Test
@@ -881,6 +1041,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         LayerInfo l2 = catalog.getLayerByName("cite:BasicPolygons");
         assertEquals(nstyles + 1, l2.getStyles().size());
         assertEquals(catalog.getStyleByName("Ponds"), l2.getDefaultStyle());
+        assertNotNull(l2.getDefaultStyle().getDateModified());
     }
 
     @Test
@@ -904,6 +1065,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         LayerInfo l2 = catalog.getLayerByName("cite:BasicPolygons");
         assertEquals(nstyles, l2.getStyles().size());
         assertEquals(catalog.getStyleByName("Ponds"), l2.getDefaultStyle());
+        assertNotNull(l2.getDefaultStyle().getDateModified());
     }
 
     @Test
@@ -927,6 +1089,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         assertTrue(response.getHeader("Location").endsWith("/styles/foo"));
 
         assertNotNull(catalog.getStyleByName("foo"));
+        assertNotNull(catalog.getStyleByName("foo").getDateCreated());
 
         Resource style = getDataDirectory().style(getCatalog().getStyleByName("foo"));
         InputStream in = style.in();
@@ -942,7 +1105,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         in = style.in();
         try {
             out = new StringWriter();
-            IOUtils.copy(in, out);
+            IOUtils.copy(in, out, "UTF-8");
             assertFalse(out.toString().startsWith("#comment!"));
         } finally {
             in.close();
@@ -973,7 +1136,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         Resource style = getDataDirectory().style(getCatalog().getStyleByName("foo"));
         try (InputStream in = style.in()) {
             out = new StringWriter();
-            IOUtils.copy(in, out);
+            IOUtils.copy(in, out, "UTF-8");
             assertTrue(out.toString().startsWith("#comment!"));
         }
     }
@@ -1019,7 +1182,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         in = style.in();
         try {
             out = new StringWriter();
-            IOUtils.copy(in, out);
+            IOUtils.copy(in, out, "UTF-8");
             assertFalse(out.toString().startsWith("#comment!"));
         } finally {
             in.close();
@@ -1058,7 +1221,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         in = style.in();
         try {
             out = new StringWriter();
-            IOUtils.copy(in, out);
+            IOUtils.copy(in, out, "UTF-8");
             assertTrue(out.toString().startsWith("#comment!"));
         } finally {
             in.close();
@@ -1101,6 +1264,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
 
         assertEquals("sld", style.getFormat());
         assertEquals(SLDHandler.VERSION_11, style.getFormatVersion());
+        assertNotNull(style.getDateCreated());
     }
 
     @Test
@@ -1119,6 +1283,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         assertEquals(201, response.getStatus());
         assertEquals(MediaType.TEXT_PLAIN_VALUE, response.getContentType());
         assertNotNull(cat.getStyleByName("gs", "foo"));
+        assertNotNull(cat.getStyleByName("gs", "foo").getDateCreated());
 
         Document d = getAsDOM(RestBaseController.ROOT_PATH + "/workspaces/gs/styles/foo.sld");
 
@@ -1169,6 +1334,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
                         "application/zip");
         assertEquals(200, response.getStatus());
         assertNotNull(cat.getStyleByName("gs", "foo"));
+        assertNotNull(cat.getStyleByName("gs", "foo").getDateCreated());
 
         Document d = getAsDOM(RestBaseController.ROOT_PATH + "/workspaces/gs/styles/foo.sld");
 
@@ -1199,6 +1365,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
         assertEquals(201, response.getStatus());
         assertEquals(MediaType.TEXT_PLAIN_VALUE, response.getContentType());
         assertNotNull(cat.getStyleByName("foo"));
+        assertNotNull(cat.getStyleByName("foo").getDateCreated());
 
         Document d = getAsDOM(RestBaseController.ROOT_PATH + "/styles/foo.sld");
 
@@ -1231,6 +1398,7 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
                         RestBaseController.ROOT_PATH + "/styles/foo", bytes, "application/zip");
         assertEquals(200, response.getStatus());
         assertNotNull(cat.getStyleByName("foo"));
+        assertNotNull(cat.getStyleByName("foo").getDateModified());
 
         Document d = getAsDOM(RestBaseController.ROOT_PATH + "/styles/foo.sld");
 
@@ -1273,12 +1441,6 @@ public class StyleControllerTest extends CatalogRESTTestSupport {
      *
      * <p>- This is a pain in the ass. - Potentially difficult to recreate all default behavior +
      * behavior needed to fix this test case
-     *
-     * @param path
-     * @param body
-     * @param contentType
-     * @return
-     * @throws Exception
      */
     protected MockHttpServletResponse putAsServletResponse(
             String path, byte[] body, String contentType, String accepts) throws Exception {

@@ -8,15 +8,22 @@ package org.geoserver.wfs.json;
 import static org.junit.Assert.assertEquals;
 
 import java.io.StringWriter;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Calendar;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TimeZone;
+import java.util.UUID;
 import net.sf.json.JSONArray;
 import net.sf.json.JSONObject;
 import org.junit.Before;
 import org.junit.Test;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.Point;
-import org.locationtech.jts.geom.PrecisionModel;
+import org.locationtech.jts.geom.impl.CoordinateArraySequence;
 import org.locationtech.jts.io.WKTReader;
 
 public class GeoJSONBuilderTest {
@@ -27,6 +34,7 @@ public class GeoJSONBuilderTest {
 
     @Before
     public void setUp() {
+        System.clearProperty("json.maxDepth");
         writer = new StringWriter();
         builder = new GeoJSONBuilder(writer);
         builder.setEncodeMeasures(true);
@@ -52,7 +60,9 @@ public class GeoJSONBuilderTest {
     class MyPoint extends Point {
 
         public MyPoint(double x, double y) {
-            super(new Coordinate(x, y), new PrecisionModel(), -1);
+            super(
+                    new CoordinateArraySequence(new Coordinate[] {new Coordinate(x, y)}),
+                    new GeometryFactory());
         }
     }
 
@@ -482,5 +492,36 @@ public class GeoJSONBuilderTest {
         assertEquals(
                 "{\"type\":\"MultiPolygon\",\"coordinates\":[[[[0,0,0,1],[1,1,0,2],[1,0,0,3],[0,0,0,1]]]]}",
                 writer.toString());
+    }
+
+    /** Checks max json nested level should allow up to 100 by default. */
+    @Test
+    public void testMaxNestedLevel() {
+        builder.object();
+        addLevels(builder, 0, 99);
+        builder.endObject();
+    }
+
+    /** Checks max json nested level should allow up to 120 via system property. */
+    @Test
+    public void testMaxNestedLevelSystemParameter() {
+        try {
+            System.setProperty("json.maxDepth", "120");
+            final StringWriter writer = new StringWriter();
+            final GeoJSONBuilder builder = new GeoJSONBuilder(writer);
+            builder.object();
+            addLevels(builder, 0, 119);
+            builder.endObject();
+        } finally {
+            System.clearProperty("json.maxDepth");
+        }
+    }
+
+    private void addLevels(final GeoJSONBuilder builder, int level, final int max) {
+        if (level >= max) return;
+        level++;
+        builder.key("inner").object();
+        addLevels(builder, level, max);
+        builder.endObject();
     }
 }

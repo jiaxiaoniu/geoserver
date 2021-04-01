@@ -97,13 +97,13 @@ to::
 
      SELECT id, name FROM table WHERE name = "A" UNION SELECT id, name FROM table WHERE name = "B"
 
-UNION improvement is disabled by default, and it is enabled by adding to your app-schema.properties file the line ::
+UNION improvement is enabled by default, and it is disabled by adding to your app-schema.properties file the line ::
 
-     app-schema.orUnionReplace = true
+     app-schema.orUnionReplace = false
 	 
-Or, alternatively, by setting the value of the Java System Property "app-schema.orUnionReplace" to "true", for example ::
+Or, alternatively, by setting the value of the Java System Property "app-schema.orUnionReplace" to "false", for example ::
 
-     java -DGEOSERVER_DATA_DIR=... -Dapp-schema.orUnionReplace=true Start
+     java -DGEOSERVER_DATA_DIR=... -Dapp-schema.orUnionReplace=false Start
 	
 .. note::
     This optimization will only be applied when a PostgresSQL database is being used.

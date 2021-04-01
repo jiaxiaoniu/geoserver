@@ -5,7 +5,12 @@
  */
 package org.geoserver.catalog;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -282,13 +287,7 @@ public class CatalogIntegrationTest extends GeoServerSystemTestSupport {
                 ModificationProxy.unwrap(lim3.getMetadata().get(key)));
     }
 
-    /**
-     * Serializes and de-serializes the provided object
-     *
-     * @param object
-     * @throws IOException
-     * @throws ClassNotFoundException
-     */
+    /** Serializes and de-serializes the provided object */
     <T> T serialize(T object) throws IOException, ClassNotFoundException {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         ObjectOutputStream oos = new ObjectOutputStream(bos);
@@ -296,7 +295,9 @@ public class CatalogIntegrationTest extends GeoServerSystemTestSupport {
         oos.close();
         ByteArrayInputStream bis = new ByteArrayInputStream(bos.toByteArray());
         ObjectInputStream ois = new ObjectInputStream(bis);
-        return (T) ois.readObject();
+        @SuppressWarnings("unchecked")
+        T cast = (T) ois.readObject();
+        return cast;
     }
 
     @Test
@@ -358,8 +359,8 @@ public class CatalogIntegrationTest extends GeoServerSystemTestSupport {
         String wkt =
                 "GEOGCS[\"GCS_ATF_Paris\",DATUM[\"D_ATF\",SPHEROID[\"Plessis_1817\",6376523.0,308.64]],PRIMEM[\"Paris\",2.337229166666667],UNIT[\"Grad\",0.01570796326794897]]";
         CoordinateReferenceSystem lCrs = CRS.parseWKT(wkt);
-        ((FeatureTypeInfo) l.getResource()).setSRS(null);
-        ((FeatureTypeInfo) l.getResource()).setNativeCRS(lCrs);
+        l.getResource().setSRS(null);
+        l.getResource().setNativeCRS(lCrs);
         assertNull(CRS.lookupEpsgCode(lCrs, false));
 
         // Use the real thing now
@@ -487,7 +488,8 @@ public class CatalogIntegrationTest extends GeoServerSystemTestSupport {
                                 .get(0)
                                 .rules()
                                 .get(0)
-                                .getSymbolizers()[0]
+                                .symbolizers()
+                                .get(0)
                         instanceof LineSymbolizer);
         // named layer with user style + named style -> 2 layers
         assertEquals(catalog.getLayerByName((getLayerId(MockData.ROAD_SEGMENTS))), layers.get(1));
@@ -498,7 +500,8 @@ public class CatalogIntegrationTest extends GeoServerSystemTestSupport {
                                 .get(0)
                                 .rules()
                                 .get(0)
-                                .getSymbolizers()[0]
+                                .symbolizers()
+                                .get(0)
                         instanceof LineSymbolizer);
         assertEquals(catalog.getLayerByName((getLayerId(MockData.ROAD_SEGMENTS))), layers.get(2));
         assertEquals(catalog.getStyleByName("line").getStyle(), styles.get(2).getStyle());
@@ -524,7 +527,8 @@ public class CatalogIntegrationTest extends GeoServerSystemTestSupport {
                                 .get(0)
                                 .rules()
                                 .get(0)
-                                .getSymbolizers()[0]
+                                .symbolizers()
+                                .get(0)
                         instanceof PointSymbolizer);
 
         // Test bounds calculation
@@ -599,6 +603,23 @@ public class CatalogIntegrationTest extends GeoServerSystemTestSupport {
     }
 
     @Test
+    public void testReloadDefaultStyles() throws Exception {
+        // clear up all "point" styles
+        final Resource styles = getDataDirectory().getStyles();
+        styles.list()
+                .stream()
+                .filter(r -> r.getType() == Resource.Type.RESOURCE && r.name().contains("point"))
+                .forEach(r -> r.delete());
+
+        // reload
+        getGeoServer().reload();
+
+        // check the default point style has been re-created
+        final StyleInfo point = getCatalog().getStyleByName("point");
+        assertNotNull(point);
+    }
+
+    @Test
     public void testChangeStyleWorkspaceRelativeResources() throws Exception {
         // move style to a different workspace
         final Catalog catalog = getCatalog();
@@ -614,5 +635,52 @@ public class CatalogIntegrationTest extends GeoServerSystemTestSupport {
         final Resource relativeSvg =
                 getDataDirectory().getStyles(secondaryWs, "images", "square16.svg");
         assertEquals(Resource.Type.RESOURCE, relativeSvg.getType());
+    }
+
+    /** Checks MetadataMap storing object for StyleInfo on catalog. */
+    @Test
+    public void testStyleMetadataMap() throws Exception {
+        final Catalog catalog = getCatalog();
+        StyleInfo style = catalog.getStyleByName("Lakes");
+        style.getMetadata().put("timeToLive", "500");
+        catalog.save(style);
+        // check saved value
+        StyleInfo styletoCheck = catalog.getStyleByName("Lakes");
+        assertEquals(1, styletoCheck.getMetadata().size());
+        assertTrue(styletoCheck.getMetadata().get("timeToLive") != null);
+        String timeToLive = (String) styletoCheck.getMetadata().get("timeToLive");
+        assertEquals("500", timeToLive);
+    }
+
+    /** Checks default not null MetadataMap storing object for StyleInfo on catalog. */
+    @Test
+    public void testStyleMetadataMapNotNull() throws Exception {
+        final Catalog catalog = getCatalog();
+        StyleInfo styletoCheck = catalog.getStyleByName("relative");
+        assertTrue(styletoCheck.getMetadata() != null);
+        assertEquals(0, styletoCheck.getMetadata().size());
+    }
+
+    /** Checks MetadataMap storing object updates for StyleInfo on catalog. */
+    @Test
+    public void testStyleMetadataMapUpdates() throws Exception {
+        setupInitialStyleToUpdate();
+        final Catalog catalog = getCatalog();
+        StyleInfo styletoCheck = catalog.getStyleByName("Lakes");
+        assertEquals(2, styletoCheck.getMetadata().size());
+        styletoCheck.getMetadata().remove("timeToLive");
+        catalog.save(styletoCheck);
+        // check updated metadataMap
+        styletoCheck = catalog.getStyleByName("Lakes");
+        assertEquals(1, styletoCheck.getMetadata().size());
+        assertTrue(styletoCheck.getMetadata().get("timeToLive") == null);
+    }
+
+    private void setupInitialStyleToUpdate() {
+        final Catalog catalog = getCatalog();
+        StyleInfo style = catalog.getStyleByName("Lakes");
+        style.getMetadata().put("timeToLive", "500");
+        style.getMetadata().put("maxCacheEntries", "20");
+        catalog.save(style);
     }
 }

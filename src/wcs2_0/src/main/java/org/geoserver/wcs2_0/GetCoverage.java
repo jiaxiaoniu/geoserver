@@ -5,7 +5,8 @@
  */
 package org.geoserver.wcs2_0;
 
-import java.awt.*;
+import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
 import java.awt.image.SampleModel;
 import java.io.IOException;
@@ -74,8 +75,8 @@ import org.geotools.coverage.grid.io.StructuredGridCoverage2DReader;
 import org.geotools.coverage.processing.CoverageProcessor;
 import org.geotools.coverage.processing.operation.Mosaic;
 import org.geotools.coverage.processing.operation.Mosaic.GridGeometryPolicy;
-import org.geotools.factory.GeoTools;
-import org.geotools.factory.Hints;
+import org.geotools.coverage.util.CoverageUtilities;
+import org.geotools.data.util.DefaultProgressListener;
 import org.geotools.geometry.Envelope2D;
 import org.geotools.geometry.GeneralEnvelope;
 import org.geotools.geometry.jts.ReferencedEnvelope;
@@ -90,12 +91,12 @@ import org.geotools.referencing.operation.transform.AffineTransform2D;
 import org.geotools.referencing.operation.transform.ProjectiveTransform;
 import org.geotools.renderer.crs.ProjectionHandler;
 import org.geotools.renderer.crs.ProjectionHandlerFinder;
-import org.geotools.resources.coverage.CoverageUtilities;
 import org.geotools.util.DateRange;
-import org.geotools.util.DefaultProgressListener;
 import org.geotools.util.NumberRange;
 import org.geotools.util.Range;
 import org.geotools.util.Utilities;
+import org.geotools.util.factory.GeoTools;
+import org.geotools.util.factory.Hints;
 import org.geotools.util.logging.Logging;
 import org.opengis.coverage.SampleDimension;
 import org.opengis.coverage.grid.GridCoverage;
@@ -178,8 +179,6 @@ public class GetCoverage {
     /**
      * Return true in case the specified format supports Multidimensional Output TODO: Consider
      * adding a method to CoverageResponseDelegate returning this information
-     *
-     * @param format
      */
     public static boolean formatSupportMDOutput(String format) {
         return mdFormats.contains(format);
@@ -379,9 +378,6 @@ public class GetCoverage {
      * @param coverageType the getCoverage
      * @param reader the Reader to be used to perform the read operation
      * @param hints hints to be used by the involved operations
-     * @param extensions
-     * @param coverageFactory
-     * @param dimensions
      */
     private GridCoverage2D setupCoverage(
             final WCSDimensionsSubsetHelper helper,
@@ -514,9 +510,10 @@ public class GetCoverage {
         // properties);
         if (reader instanceof StructuredGridCoverage2DReader && coverageDimensions != null) {
             // Setting dimensions as properties
-            Map map = coverage.getProperties();
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = coverage.getProperties();
             if (map == null) {
-                map = new HashMap();
+                map = new HashMap<>();
             }
             for (DimensionBean coverageDimension : coverageDimensions) {
                 helper.setCoverageDimensionProperty(map, gridCoverageRequest, coverageDimension);
@@ -617,8 +614,8 @@ public class GetCoverage {
             NumberRange<?> requestedElevationRange,
             DimensionInfo elevationDimension)
             throws IOException {
-        NumberRange actualElevationSubset =
-                new NumberRange(
+        NumberRange<Double> actualElevationSubset =
+                new NumberRange<>(
                         Double.class, accessor.getMinElevation(), accessor.getMaxElevation());
         if (!requestedElevationRange.intersects(actualElevationSubset)) {
             throw new WCS20Exception(
@@ -730,7 +727,6 @@ public class GetCoverage {
                 }
             }
         }
-        ;
         return dimensions.toArray(new GridSampleDimension[dimensions.size()]);
     }
 
@@ -904,11 +900,7 @@ public class GetCoverage {
         return null;
     }
 
-    /**
-     * @param coverage
-     * @param hints
-     * @param outputCRS
-     */
+    /** */
     private GridCoverage2D enforceLatLongOrder(
             GridCoverage2D coverage, final Hints hints, final CoordinateReferenceSystem outputCRS)
             throws Exception {
@@ -1006,10 +998,6 @@ public class GetCoverage {
      * This method is responsible for reading the data based on the specified request. It might
      * return a single coverage, but if the request is a dateline crossing one, it will return two
      * instead
-     *
-     * @param cinfo
-     * @param reader
-     * @param hints
      */
     private List<GridCoverage2D> readCoverage(
             WCSDimensionsSubsetHelper helper,
@@ -1415,11 +1403,6 @@ public class GetCoverage {
     /**
      * Parse the scaling type applied to that request and return a resolution satisfying that
      * scaling.
-     *
-     * @param scaling
-     * @param subset
-     * @param nativeResX
-     * @param nativeResY
      */
     private double[] computeRequestedResolution(
             ScalingType scaling, Envelope subset, double nativeResX, double nativeResY) {
@@ -1469,7 +1452,6 @@ public class GetCoverage {
      * @param isOutputCRS a <code>boolean</code> which tells me whether the CRS we are looking for
      *     is a subsetting or an OutputCRS
      * @return a {@link CoordinateReferenceSystem}.
-     * @throws WCS20Exception
      */
     private CoordinateReferenceSystem extractCRSInternal(
             Map<String, ExtensionItemType> extensions,
@@ -1608,10 +1590,7 @@ public class GetCoverage {
         return parsedExtensions;
     }
 
-    /**
-     * @param reader
-     * @param extensions
-     */
+    /** */
     private Map<String, InterpolationPolicy> extractInterpolation(
             GridCoverage2DReader reader, Map<String, ExtensionItemType> extensions) {
         // preparation
@@ -1932,7 +1911,6 @@ public class GetCoverage {
      *
      * @param coverage the input {@link GridCoverage2D}
      * @param spatialInterpolation the requested {@link Interpolation}
-     * @param extensions the list of WCS extensions to draw info from
      * @param hints an instance of {@link Hints} to apply
      * @return a scaled version of the input {@link GridCoverage2D} according to what is specified
      *     in the list of extensions. It might be the source coverage itself if no operations where
@@ -2007,11 +1985,7 @@ public class GetCoverage {
             this.input = input;
         }
 
-        /**
-         * Increment the total size value if not disabled
-         *
-         * @param GridCoverage2D
-         */
+        /** Increment the total size value if not disabled */
         public void addSize(GridCoverage2D coverage) {
             incrementalSize +=
                     getCoverageSize(
@@ -2047,9 +2021,6 @@ public class GetCoverage {
         /**
          * Computes the size of a grid coverage in bytes given its grid envelope and the target
          * sample model (code from WCSUtils)
-         *
-         * @param envelope
-         * @param sm
          */
         private static long getCoverageSize(GridEnvelope2D envelope, SampleModel sm) {
             // === compute the coverage memory usage and compare with limit
@@ -2083,7 +2054,6 @@ public class GetCoverage {
     /**
      * Utility function to format a byte amount into a human readable string (code from WCSUtils)
      *
-     * @param bytes
      * @return a formatted string
      */
     private static String formatBytes(long bytes) {

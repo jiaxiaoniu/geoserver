@@ -136,7 +136,7 @@ public class StationsMockData extends AbstractAppSchemaMockData {
                 gml31Parameters);
         addStationFeatureType(
                 STATIONS_PREFIX_GML31, "gml31", "stations", "base/stations.xml", gml31Parameters);
-        // add GML 3.1 feature type
+        // add GML 3.2 feature type
         Map<String, String> gml32Parameters = new HashMap<>();
         gml32Parameters.put("GML_PREFIX", "gml32");
         gml32Parameters.put("GML_NAMESPACE", "http://www.opengis.net/gml/3.2");
@@ -251,7 +251,6 @@ public class StationsMockData extends AbstractAppSchemaMockData {
         substituteParameters(
                 "/test-data/stations/base/stations.properties", parameters, stationsProperties);
         substituteParameters("/test-data/stations/base/stations.xsd", parameters, stationsSchema);
-        substituteParameters("/test-data/stations/base/stations.xsd", parameters, stationsSchema);
         substituteParameters(
                 "/test-data/stations/base/measurements.xsd", parameters, measurementsSchema);
         // extra features to add:
@@ -305,7 +304,6 @@ public class StationsMockData extends AbstractAppSchemaMockData {
         substituteParameters(
                 "/test-data/stations/base/stations.properties", parameters, stationsProperties);
         substituteParameters("/test-data/stations/base/stations.xsd", parameters, stationsSchema);
-        substituteParameters("/test-data/stations/base/stations.xsd", parameters, stationsSchema);
         substituteParameters(
                 "/test-data/stations/base/measurements.xsd", parameters, measurementsSchema);
         // extra features to add:
@@ -355,14 +353,7 @@ public class StationsMockData extends AbstractAppSchemaMockData {
                 otherResourcesFiles);
     }
 
-    /**
-     * Helper method that
-     *
-     * @param resource
-     * @param gmlPrefix
-     * @param gmlDirectory
-     * @return
-     */
+    /** Helper method that */
     private File getTargetFile(String resource, String gmlPrefix, File gmlDirectory) {
         int index = resource.lastIndexOf("/");
         if (index < 0) {
@@ -427,21 +418,21 @@ public class StationsMockData extends AbstractAppSchemaMockData {
     }
 
     /**
-     * String of features to add to Stations feature type
+     * String of features to add to Stations feature type.
      *
      * @return Optional String of features
      */
     protected Optional<String> extraStationFeatures() {
-        return Optional.ofNullable(null);
+        return Optional.empty();
     }
 
     /**
-     * String of features to add to Measurements feature type
+     * String of features to add to Measurements feature type.
      *
      * @return Optional String of features
      */
     protected Optional<String> extraMeasurementFeatures() {
-        return Optional.ofNullable(null);
+        return Optional.empty();
     }
 
     @Override

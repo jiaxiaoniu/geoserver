@@ -5,7 +5,8 @@
  */
 package org.geoserver.wcs.kvp;
 
-import static org.vfny.geoserver.wcs.WcsException.WcsExceptionCode.*;
+import static org.vfny.geoserver.wcs.WcsException.WcsExceptionCode.InvalidParameterValue;
+import static org.vfny.geoserver.wcs.WcsException.WcsExceptionCode.MissingParameterValue;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -44,10 +45,10 @@ import org.geoserver.ows.util.KvpUtils.Tokenizer;
 import org.geoserver.ows.util.RequestUtils;
 import org.geotools.coverage.grid.GridEnvelope2D;
 import org.geotools.geometry.GeneralEnvelope;
+import org.geotools.metadata.i18n.ErrorKeys;
+import org.geotools.metadata.i18n.Errors;
 import org.geotools.referencing.CRS;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
-import org.geotools.resources.i18n.ErrorKeys;
-import org.geotools.resources.i18n.Errors;
 import org.geotools.util.DateRange;
 import org.geotools.util.NumberRange;
 import org.opengis.referencing.FactoryException;
@@ -74,7 +75,8 @@ public class Wcs10GetCoverageRequestReader extends EMFKvpRequestReader {
     }
 
     @Override
-    public Object read(Object request, Map kvp, Map rawKvp) throws Exception {
+    public Object read(Object request, Map<String, Object> kvp, Map<String, Object> rawKvp)
+            throws Exception {
         GetCoverageType getCoverage = (GetCoverageType) super.read(request, kvp, rawKvp);
 
         // grab coverage info to perform further checks
@@ -129,6 +131,7 @@ public class Wcs10GetCoverageRequestReader extends EMFKvpRequestReader {
     }
 
     /** @param kvp */
+    @SuppressWarnings("unchecked") // due to EMF model not having generics
     private DomainSubsetType parseDomainSubset(Map kvp) {
         final DomainSubsetType domainSubset = Wcs10Factory.eINSTANCE.createDomainSubsetType();
         final SpatialSubsetType spatialSubset = Wcs10Factory.eINSTANCE.createSpatialSubsetType();
@@ -196,7 +199,9 @@ public class Wcs10GetCoverageRequestReader extends EMFKvpRequestReader {
         } else if (time != null) {
             timeSequence = Wcs10Factory.eINSTANCE.createTimeSequenceType();
             if (time instanceof Collection) {
-                for (Object tPos : (Collection<Object>) time) {
+                @SuppressWarnings("unchecked")
+                Collection<Object> timeCollection = (Collection<Object>) time;
+                for (Object tPos : timeCollection) {
                     addToTimeSequence(timeSequence, tPos);
                 }
             }
@@ -355,10 +360,8 @@ public class Wcs10GetCoverageRequestReader extends EMFKvpRequestReader {
         return domainSubset;
     }
 
-    /**
-     * @param timeSequence
-     * @param tPos
-     */
+    /** */
+    @SuppressWarnings("unchecked") // due to EMF model not having generics
     private void addToTimeSequence(TimeSequenceType timeSequence, Object tPos) {
         if (tPos instanceof Date) {
             final TimePositionType timePosition = Gml4wcsFactory.eINSTANCE.createTimePositionType();
@@ -377,6 +380,7 @@ public class Wcs10GetCoverageRequestReader extends EMFKvpRequestReader {
         }
     }
 
+    @SuppressWarnings("unchecked") // due to EMF model not having generics
     private RangeSubsetType parseRangeSubset(Map kvp, String coverageName) {
         final RangeSubsetType rangeSubset = Wcs10Factory.eINSTANCE.createRangeSubsetType();
 
@@ -418,10 +422,7 @@ public class Wcs10GetCoverageRequestReader extends EMFKvpRequestReader {
         return rangeSubset;
     }
 
-    /**
-     * @param rangeSubset
-     * @param axis
-     */
+    /** */
     @SuppressWarnings("unchecked")
     private void checkTypeAxisRange(
             final RangeSubsetType rangeSubset, Object axis, String axisName) {
@@ -519,7 +520,7 @@ public class Wcs10GetCoverageRequestReader extends EMFKvpRequestReader {
         }
     }
 
-    private OutputType parseOutputElement(final Map<String, String> kvp) throws Exception {
+    private OutputType parseOutputElement(final Map<String, Object> kvp) throws Exception {
         final OutputType output = Wcs10Factory.eINSTANCE.createOutputType();
         final CodeType crsType = Gml4wcsFactory.eINSTANCE.createCodeType();
         final CodeType formatType = Gml4wcsFactory.eINSTANCE.createCodeType();
@@ -551,11 +552,7 @@ public class Wcs10GetCoverageRequestReader extends EMFKvpRequestReader {
         return output;
     }
 
-    /**
-     * DEcode the requested CRS following the WCS 1.0 style with LON,LAT axes order.
-     *
-     * @param crsName
-     */
+    /** DEcode the requested CRS following the WCS 1.0 style with LON,LAT axes order. */
     private static CoordinateReferenceSystem decodeCRS100(String crsName) throws WcsException {
         if ("WGS84(DD)".equals(crsName)) {
             crsName = "EPSG:4326";
@@ -576,8 +573,6 @@ public class Wcs10GetCoverageRequestReader extends EMFKvpRequestReader {
     /**
      * Parses the interpolation parameter from the kvp. If nothing is present the default nearest
      * neighbor is set.
-     *
-     * @param kvp
      */
     private InterpolationMethodType parseInterpolation(Map kvp) {
         if (kvp.containsKey("interpolation")) {

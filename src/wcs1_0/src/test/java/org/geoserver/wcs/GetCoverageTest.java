@@ -9,9 +9,9 @@ import static org.custommonkey.xmlunit.XMLAssert.assertXpathEvaluatesTo;
 import static org.geoserver.data.test.MockData.TASMANIA_BM;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.not;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
 import java.awt.image.RenderedImage;
@@ -50,11 +50,11 @@ import org.geotools.data.DataSourceException;
 import org.geotools.gce.geotiff.GeoTiffFormat;
 import org.geotools.gce.geotiff.GeoTiffReader;
 import org.geotools.geometry.GeneralEnvelope;
-import org.geotools.metadata.iso.spatial.PixelTranslation;
+import org.geotools.geometry.PixelTranslation;
 import org.geotools.referencing.CRS;
 import org.geotools.referencing.operation.transform.AffineTransform2D;
+import org.geotools.util.PreventLocalEntityResolver;
 import org.geotools.wcs.WCSConfiguration;
-import org.geotools.xml.PreventLocalEntityResolver;
 import org.junit.Before;
 import org.junit.Test;
 import org.opengis.coverage.grid.GridCoverage;
@@ -125,7 +125,7 @@ public class GetCoverageTest extends WCSTestSupport {
     }
 
     private Map<String, Object> baseMap() {
-        Map<String, Object> raw = new HashMap<String, Object>();
+        Map<String, Object> raw = new HashMap<>();
         raw.put("service", "WCS");
         raw.put("version", "1.0.0");
         raw.put("request", "GetCoverage");
@@ -540,12 +540,7 @@ public class GetCoverageTest extends WCSTestSupport {
         assertEquals(0, pixel[2]);
     }
 
-    /**
-     * Parses teh TIFF contained in the response as a {@link RenderedImage}
-     *
-     * @param response
-     * @throws IOException
-     */
+    /** Parses teh TIFF contained in the response as a {@link RenderedImage} */
     RenderedImage readTiff(MockHttpServletResponse response) throws IOException {
         ImageReader reader = ImageIO.getImageReadersByFormatName("tiff").next();
         reader.setInput(ImageIO.createImageInputStream(getBinaryInputStream(response)));

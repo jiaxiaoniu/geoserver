@@ -16,7 +16,7 @@ import org.geoserver.catalog.event.CatalogListener;
 import org.geoserver.catalog.impl.CatalogImpl;
 import org.geoserver.platform.resource.Resource;
 import org.geoserver.platform.resource.Resources;
-import org.geotools.decorate.Wrapper;
+import org.geotools.util.decorate.Wrapper;
 import org.geotools.util.logging.Logging;
 import org.springframework.batch.core.BatchStatus;
 import org.springframework.batch.core.JobExecution;
